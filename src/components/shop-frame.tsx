@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useI18n } from "@/lib/i18n";
 import { errorKey } from "@/lib/i18n";
+import { adoptTableFromAddress, setTable, useTable } from "@/lib/table";
 import { retryShop, useShop } from "@/lib/use-shop";
 import type { Menu, Shop } from "@/lib/types";
 import { DanMark } from "./mark";
@@ -17,11 +18,16 @@ import { Button } from "./ui";
 export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => React.ReactNode }) {
   const { t, locale, setLocale } = useI18n();
   const state = useShop();
+  const table = useTable();
+  const ordering = table ? `${t("eatInAt")} ${table}` : t("collectionOnly");
+
+  // A table's QR link (`/?table=3`) says where the customer is sitting.
+  useEffect(() => adoptTableFromAddress(window.location.search), []);
 
   useEffect(() => {
-    if (state.status === "ready") document.title = `${state.shop.name} · ${t("collectionOnly")}`;
+    if (state.status === "ready") document.title = `${state.shop.name} · ${ordering}`;
     document.documentElement.lang = locale === "zh-Hant" ? "zh-Hant" : "en";
-  }, [state, locale, t]);
+  }, [state, locale, ordering]);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -61,13 +67,20 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
         </div>
         {state.status === "ready" ? (
           <div className="mx-auto flex max-w-3xl flex-wrap items-baseline gap-x-4 gap-y-1 px-4 pb-3 text-sm text-ink-soft">
-            <span className="font-display tracking-[0.14em] text-ink uppercase">{t("collectionOnly")}</span>
+            <span className="font-display tracking-[0.14em] text-ink uppercase" data-testid="ordering-for">
+              {ordering}
+            </span>
             <span>
               {state.shop.address}, {state.shop.city}
             </span>
             <a className="text-accent-ink underline" href={`tel:${state.shop.phone.replace(/\s/g, "")}`}>
               {state.shop.phone}
             </a>
+            {table ? (
+              <button type="button" className="min-h-11 cursor-pointer text-accent-ink underline" onClick={() => setTable(null)} data-testid="not-at-table">
+                {t("notAtTable")}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </header>

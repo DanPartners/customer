@@ -13,7 +13,7 @@ import { ShopFrame } from "./shop-frame";
 import { Kicker, Notice } from "./ui";
 
 const ORDER_LIVE =
-  "subscription Order($token: String!) { order(token: $token) { number status createdAt customerName notes totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence } } }";
+  "subscription Order($token: String!) { order(token: $token) { number status createdAt customerName notes fulfilment table totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence } } }";
 
 const STEPS: { status: PublicOrder["status"]; label: CopyKey }[] = [
   { status: "new", label: "stepReceived" },
@@ -21,6 +21,15 @@ const STEPS: { status: PublicOrder["status"]; label: CopyKey }[] = [
   { status: "ready", label: "stepReady" },
   { status: "completed", label: "stepCollected" },
 ];
+
+/** An eat-in order is brought to the table, so its last two steps read differently. */
+const TABLE_LABELS: Partial<Record<CopyKey, CopyKey>> = {
+  stepReady: "stepOnItsWay",
+  stepCollected: "stepServed",
+  statusReady: "statusReadyTable",
+  statusCompleted: "statusServed",
+  payAtCollection: "payBeforeLeaving",
+};
 
 const STATUS_COPY: Record<PublicOrder["status"], CopyKey> = {
   awaiting_payment: "statusAwaiting",
@@ -77,6 +86,8 @@ function OrderStatus({ shop }: { shop: Shop }) {
   if (!order) return <p className="text-ink-soft">{t("checking")}</p>;
 
   const step = STEPS.findIndex((entry) => entry.status === order.status);
+  const atTable = order.fulfilment === "eat_in";
+  const say = (key: CopyKey) => t((atTable && TABLE_LABELS[key]) || key);
   return (
     <div className="space-y-6 pb-10" data-testid="order-status" data-status={order.status}>
       <header className="border-b-[3px] border-ink pb-3">
@@ -85,8 +96,13 @@ function OrderStatus({ shop }: { shop: Shop }) {
           {order.number != null ? `#${order.number}` : <span className="text-2xl text-ink-soft">{t("awaitingNumber")}</span>}
         </p>
         <p className="mt-2 text-lg" role="status" aria-live="polite" data-testid="order-message">
-          {t(STATUS_COPY[order.status])}
+          {say(STATUS_COPY[order.status])}
         </p>
+        {atTable && order.table ? (
+          <p className="mt-1 font-display tracking-[0.14em] uppercase" data-testid="order-table">
+            {t("eatInAt")} {order.table}
+          </p>
+        ) : null}
         {connection === "offline" ? <p className="mt-1 text-sm text-ink-soft">{t("checking")}</p> : null}
       </header>
 
@@ -98,7 +114,7 @@ function OrderStatus({ shop }: { shop: Shop }) {
               aria-current={index === step ? "step" : undefined}
               className={`border-t-[3px] pt-2 text-center text-sm leading-tight ${index <= step ? "border-accent text-ink" : "border-rule text-ink-soft"}`}
             >
-              {t(entry.label)}
+              {say(entry.label)}
             </li>
           ))}
         </ol>
@@ -143,7 +159,7 @@ function OrderStatus({ shop }: { shop: Shop }) {
             ? order.payment.status === "paid"
               ? t("paidByCard")
               : t("statusAwaiting")
-            : t("payAtCollection")}
+            : say("payAtCollection")}
         </p>
       </section>
 

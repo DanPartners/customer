@@ -61,6 +61,8 @@ export type PublicOrder = {
   createdAt: string;
   customerName: string;
   notes: string;
+  fulfilment: "collection" | "eat_in";
+  table: string | null;
   lines: { number: number; nameEn: string; nameZh: string; qty: number; unitPricePence: number }[];
   totalPence: number;
   payment: { method: PayWith; status: "due" | "paid" };
@@ -75,4 +77,6 @@ export type PlaceOrderInput = {
   lines: { number: number; qty: number }[];
   payWith: PayWith;
   allergensConfirmed: boolean;
+  /** Set when ordering from a table's link: the order is brought to it. */
+  table: string | null;
 };

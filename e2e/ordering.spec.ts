@@ -122,6 +122,33 @@ test("a pay-at-the-shop order is followed live until it is collected", async ({ 
   expect(await page.evaluate(() => (window as unknown as { untouched?: boolean }).untouched)).toBe(true);
 });
 
+test("a table's link makes an eat-in order that is brought to that table", async ({ page, request }) => {
+  await freshMenu(page);
+  await page.goto("/?table=Patio%202");
+  await expect(page.getByTestId("ordering-for")).toHaveText(/Eat in · Table Patio 2/);
+  await checkout(page, "at_shop", `Table ${Date.now()}`);
+  await expect(page.getByTestId("order-table")).toContainText("Patio 2");
+  await expect(page.getByTestId("order-payment")).toContainText("Pay at the counter before you leave");
+  const number = Number((await page.getByTestId("order-number").textContent())?.replace("#", ""));
+  const orders = (await staff(request, "{ orders { id number fulfilment table } }")) as {
+    orders: { id: string; number: number; fulfilment: string; table: string | null }[];
+  };
+  const placed = orders.orders.find((order) => order.number === number)!;
+  expect(placed).toMatchObject({ fulfilment: "eat_in", table: "Patio 2" });
+  for (const [next, words] of [["preparing", "cooking"], ["ready", "on its way to your table"], ["completed", "Served"]] as const) {
+    await staff(request, "mutation($id: ID!, $s: OrderStatus!) { updateOrder(id: $id, status: $s) { id } }", { id: placed.id, s: next });
+    await expect(page.getByTestId("order-message")).toContainText(words, { timeout: 3000 });
+  }
+
+  // Leaving the table turns the next order back into a collection.
+  await page.goto("/");
+  await page.getByTestId("not-at-table").click();
+  await expect(page.getByTestId("ordering-for")).toHaveText(/Order for collection/);
+  // A bad table name in a link is ignored.
+  await page.goto("/?table=%3Cscript%3E");
+  await expect(page.getByTestId("ordering-for")).toHaveText(/Order for collection/);
+});
+
 const STRIPE_STUB = `
 window.Stripe = function () {
   return {

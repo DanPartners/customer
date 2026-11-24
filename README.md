@@ -1,6 +1,6 @@
 # Dan: customer ordering
 
-The site a shop's customers order from. They open the shop's link (or scan its QR code), see the bilingual menu with allergens, order for collection, pay by card or at the shop, and follow their order live until it is ready.
+The site a shop's customers order from. They open the shop's link (or scan its QR code), see the bilingual menu with allergens, order for collection (or, from a table's QR code, to eat in), pay by card or at the shop, and follow their order live until it is ready.
 
 Each shop has its own copy of this site, at its own address, talking to that shop's [Dan server](https://github.com/DanPartners/server) through the server's **public API**. The counter side is the [dashboard](https://github.com/DanPartners/dashboard).
 
@@ -44,6 +44,14 @@ Then, on the shop server, add this site's address to `DAN_PUBLIC_ORIGINS`. The l
 
 English or Traditional Chinese, switched in the header and remembered on the phone.
 
+### Table links
+
+A QR code on a table points at the site with the table's name: `https://order.yourshop.example/?table=3`. The header then says **Eat in · Table 3**, the order is sent as eat-in for that table, and the order page reads "on its way to your table" and "served" instead of "ready to collect" and "collected". Paying at the shop becomes "pay at the counter before you leave".
+
+- A table name is up to 10 letters (any language), numbers, spaces or hyphens: `3`, `12A`, `Patio 2`, `窗邊-1`. Anything else in the link is ignored, and the shop server checks it again.
+- The table is remembered for that browser tab only, so someone who scanned a table's code and later orders from home is not still "at table 3". The header has "Not at a table? Order for collection" to clear it.
+- Anyone can type any table name into the address. The staff see it on the docket and can check with the customer, as they would at the counter.
+
 ## How it talks to the shop
 
 - **Queries over HTTPS** to `<api>/graphql`: the shop, the menu, placing an order. The contract is the server's [`public.graphql`](https://github.com/DanPartners/server/blob/main/public.graphql); this side is [`src/lib/api.ts`](src/lib/api.ts).
@@ -71,7 +79,7 @@ Chinese text uses the phone's own Chinese fonts. The site ships none, which keep
 
 ## Tests
 
-`e2e/ordering.spec.ts` runs the site against a real shop server: security headers, the shop's theme, sold-out dishes, a pay-at-the-shop order followed live to collection, and a card order confirmed by a signed Stripe notification. It changes data, so never point it at a shop in service. Set the server up with `dan-server init --demo`, start `e2e/fake-stripe.mjs` and point the server's `DAN_STRIPE_API_BASE` at it, then:
+`e2e/ordering.spec.ts` runs the site against a real shop server: security headers, the shop's theme, sold-out dishes, a pay-at-the-shop order followed live to collection, a table link's eat-in order followed until it is served, and a card order confirmed by a signed Stripe notification. It changes data, so never point it at a shop in service. Set the server up with `dan-server init --demo`, start `e2e/fake-stripe.mjs` and point the server's `DAN_STRIPE_API_BASE` at it, then:
 
 ```bash
 DAN_E2E_STAFF_URL=http://127.0.0.1:2283 DAN_E2E_PUBLIC_URL=http://127.0.0.1:2284 \
@@ -83,6 +91,6 @@ Without those variables the tests are skipped.
 
 ## Not built yet
 
-- Delivery. Collection only.
+- Delivery. Collection, and eat-in from a table's link, only.
 - A way for the owner to pause online ordering on a busy night.
 - Adding a stamp to the customer's card from an online order.

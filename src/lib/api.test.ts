@@ -22,11 +22,12 @@ describe("public API client", () => {
   it("sends dish numbers and quantities only; the server sets the prices", async () => {
     const { fetchImpl, seen } = fake({ data: { placeOrder: { token: "t", order: {} } } });
     await placeOrder(
-      { customerName: "Alex", phone: "07700 900123", notes: "", lines: [{ number: 81, qty: 2 }], payWith: "at_shop", allergensConfirmed: true },
+      { customerName: "Alex", phone: "07700 900123", notes: "", lines: [{ number: 81, qty: 2 }], payWith: "at_shop", allergensConfirmed: true, table: "3" },
       { fetchImpl, base: "https://api.shop.example" },
     );
     const body = JSON.parse(String(seen[0].init.body)) as { variables: { input: Record<string, unknown> } };
     expect(body.variables.input.lines).toEqual([{ number: 81, qty: 2 }]);
+    expect(body.variables.input.table).toBe("3");
     expect(JSON.stringify(body.variables)).not.toContain("Pence");
   });
 

@@ -68,7 +68,7 @@ export async function call<T>(
 
 const THEME = "preset typeface custom { paper ink accent chrome }";
 const ORDER =
-  "number status createdAt customerName notes totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence }";
+  "number status createdAt customerName notes fulfilment table totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence }";
 
 export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
   const data = await call<{ shop: Shop; menu: Menu }>(

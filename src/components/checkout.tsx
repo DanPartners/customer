@@ -8,6 +8,7 @@ import { add, allergensIn, lines, MAX_ORDER_PENCE, total } from "@/lib/basket";
 import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, errorKey, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
+import { useTable } from "@/lib/table";
 import type { Menu, PayWith, Shop } from "@/lib/types";
 import { reloadShop } from "@/lib/use-shop";
 import { ShopFrame } from "./shop-frame";
@@ -21,6 +22,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const { basket } = useLocal();
+  const table = useTable();
   const order = lines(basket, menu.items);
   const allergens = allergensIn(order, menu.items);
   const [name, setName] = useState("");
@@ -61,6 +63,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         lines: order.map((line) => ({ number: line.item.number, qty: line.qty })),
         payWith,
         allergensConfirmed: true,
+        table,
       });
       writeLocal({ basket: {} });
       router.push(`/order/${placed.token}`);
@@ -111,6 +114,13 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
           </span>
         </div>
         <p className="mt-1 text-sm text-ink-soft">{t("totalNote")}</p>
+        {table ? (
+          <div className="mt-3" data-testid="checkout-table">
+            <Notice>
+              {t("bringToTable")} <strong className="font-display">{table}</strong>
+            </Notice>
+          </div>
+        ) : null}
         {sum > MAX_ORDER_PENCE ? <div className="mt-3"><Notice tone="alert">{t("errTooLarge")}</Notice></div> : null}
       </section>
 
@@ -140,7 +150,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         {shop.payments.card ? (
           <PayOption value="card" current={payWith} onChange={setPayWith} title={t("payCard")} hint={t("payCardHint")} />
         ) : null}
-        <PayOption value="at_shop" current={payWith} onChange={setPayWith} title={t("payAtShop")} hint={t("payAtShopHint")} />
+        <PayOption value="at_shop" current={payWith} onChange={setPayWith} title={table ? t("payAtCounter") : t("payAtShop")} hint={table ? t("payAtCounterHint") : t("payAtShopHint")} />
       </fieldset>
 
       {errors.submit ? <Notice tone="alert">{errors.submit}</Notice> : null}
