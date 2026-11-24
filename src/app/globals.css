@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+/*
+ * Shared with the dashboard's globals.css: the same colour roles, surfaces
+ * and typefaces, so a shop's theme looks the same to staff and customers.
+ *
+ * Colour.
+ *
+ * Components never name a colour. They paint with the roles below, and the
+ * roles point at --dan-* properties that a theme sets on <html>.
+ * src/lib/theme.ts derives every value from three chosen colours and holds
+ * them to a contrast floor. The values in :root are the Dan preset, used
+ * until a saved theme is applied (a test keeps the two in step).
+ */
+@theme inline {
+  --color-paper: var(--dan-paper);
+  --color-paper-raised: var(--dan-paper-raised);
+  --color-paper-deep: var(--dan-paper-deep);
+  --color-ink: var(--dan-ink);
+  --color-ink-soft: var(--dan-ink-soft);
+  --color-accent: var(--dan-accent);
+  --color-accent-deep: var(--dan-accent-deep);
+  --color-accent-ink: var(--dan-accent-ink);
+  --color-on-accent: var(--dan-on-accent);
+  --color-rule: var(--dan-rule);
+
+  /* Not themed. The seal is the brand mark; the slip is paper out of a printer. */
+  --color-seal: #b83a2e;
+  --color-on-seal: #ffffff;
+  --color-slip: #fffef8;
+  --color-slip-ink: #1a1612;
+
+  /* Type. The first three follow the chosen typeface; see [data-typeface] below. */
+  --font-display: var(--dan-font-display);
+  --font-body: var(--dan-font-body);
+  --font-zh: var(--dan-font-zh);
+
+  /* Not themed. The word "Dan" is the brand wordmark; the ticket is a till roll. */
+  --font-wordmark: var(--font-bodoni), "Didot", "Bodoni MT", "Times New Roman", serif;
+  --font-ticket: var(--font-plex), "Courier New", ui-monospace, monospace;
+}
+
+/*
+ * Typefaces. One block per id in TYPEFACE_IDS (src/lib/theme.ts); a test keeps
+ * the two lists in step. :root carries the default, Plex.
+ */
+:root,
+[data-typeface="plex"] {
+  --dan-font-display: var(--font-plex-sans), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-body: var(--font-plex-sans), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-zh: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC", sans-serif;
+  --dan-display-weight: 500;
+}
+
+[data-typeface="inter"] {
+  --dan-font-display: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-body: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-zh: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC", sans-serif;
+  --dan-display-weight: 600;
+}
+
+[data-typeface="dm"] {
+  --dan-font-display: var(--font-dm-sans), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-body: var(--font-dm-sans), "Helvetica Neue", Arial, sans-serif;
+  --dan-font-zh: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC", sans-serif;
+  --dan-display-weight: 500;
+}
+
+[data-typeface="source"] {
+  --dan-font-display: var(--font-source), "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --dan-font-body: var(--font-source), "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --dan-font-zh: "Noto Serif TC", "Noto Serif CJK TC", "Songti TC", "PMingLiU", serif;
+  --dan-display-weight: 600;
+}
+
+[data-typeface="classic"] {
+  --dan-font-display: var(--font-bodoni), "Didot", "Bodoni MT", "Times New Roman", serif;
+  --dan-font-body: var(--font-source), "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --dan-font-zh: "Noto Serif TC", "Noto Serif CJK TC", "Songti TC", "PMingLiU", serif;
+  --dan-display-weight: 500;
+}
+
+/* Headings carry the weight that suits the typeface. A weight utility still wins. */
+@layer base {
+  .font-display {
+    font-weight: var(--dan-display-weight);
+  }
+}
+
+:root {
+  --dan-paper: #f5eedc;
+  --dan-paper-raised: #faf7ee;
+  --dan-paper-deep: #dfd9c8;
+  --dan-ink: #1b1916;
+  --dan-ink-soft: #656159;
+  --dan-accent: #b83a2e;
+  --dan-accent-deep: #902d24;
+  --dan-accent-ink: #b83a2e;
+  --dan-on-accent: #ffffff;
+  --dan-rule: #1b191629;
+
+  --dan-chrome-paper: #f5eedc;
+  --dan-chrome-paper-raised: #faf7ee;
+  --dan-chrome-paper-deep: #dfd9c8;
+  --dan-chrome-ink: #1b1916;
+  --dan-chrome-ink-soft: #656159;
+  --dan-chrome-accent: #b83a2e;
+  --dan-chrome-accent-deep: #902d24;
+  --dan-chrome-accent-ink: #b83a2e;
+  --dan-chrome-on-accent: #ffffff;
+  --dan-chrome-rule: #1b191629;
+
+  color-scheme: light;
+}
+
+/*
+ * The side menu is its own surface. Inside .chrome the same roles resolve to
+ * the chrome colours, so a button or a toggle placed there needs no variant.
+ * .chrome-sm does the same for the phone header only. Pair either with
+ * bg-paper and text-ink to paint the surface itself.
+ */
+.chrome {
+  --dan-paper: var(--dan-chrome-paper);
+  --dan-paper-raised: var(--dan-chrome-paper-raised);
+  --dan-paper-deep: var(--dan-chrome-paper-deep);
+  --dan-ink: var(--dan-chrome-ink);
+  --dan-ink-soft: var(--dan-chrome-ink-soft);
+  --dan-accent: var(--dan-chrome-accent);
+  --dan-accent-deep: var(--dan-chrome-accent-deep);
+  --dan-accent-ink: var(--dan-chrome-accent-ink);
+  --dan-on-accent: var(--dan-chrome-on-accent);
+  --dan-rule: var(--dan-chrome-rule);
+}
+
+@media (width < 48rem) {
+  .chrome-sm {
+    --dan-paper: var(--dan-chrome-paper);
+    --dan-paper-raised: var(--dan-chrome-paper-raised);
+    --dan-paper-deep: var(--dan-chrome-paper-deep);
+    --dan-ink: var(--dan-chrome-ink);
+    --dan-ink-soft: var(--dan-chrome-ink-soft);
+    --dan-accent: var(--dan-chrome-accent);
+    --dan-accent-deep: var(--dan-chrome-accent-deep);
+    --dan-accent-ink: var(--dan-chrome-accent-ink);
+    --dan-on-accent: var(--dan-chrome-on-accent);
+    --dan-rule: var(--dan-chrome-rule);
+  }
+}
+
+/*
+ * Chinese text uses the device's own fonts (PingFang on iPhone, Noto on
+ * Android, JhengHei on Windows), named in --dan-font-zh. The dashboard ships
+ * subsets of its own copy; this site's Chinese is mostly dish names, which no
+ * subset could cover, so it ships none and saves the download on phones.
+ */
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+ * Rules written by hand read the --dan-* properties directly. The --color-*
+ * names resolve once on <html>, so they would ignore the side menu's surface.
+ */
+::selection {
+  background: var(--dan-accent);
+  color: var(--dan-on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--dan-accent-ink);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--dan-accent);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+dialog.sheet {
+  width: min(36rem, calc(100% - 2rem));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--dan-rule);
+  border-top: 0.375rem solid var(--color-seal);
+  background: var(--dan-paper);
+  color: var(--dan-ink);
+}
+
+dialog.sheet::backdrop {
+  background: rgb(0 0 0 / 46%);
+}
+
+.ticket-slip {
+  width: 80mm;
+  max-width: 100%;
+  background: var(--color-slip);
+  color: var(--color-slip-ink);
+  color-scheme: light;
+}
+
+/*
+ * The torn edge from the icon, where the last stroke of 單 becomes a receipt.
+ * .torn cuts the teeth; .torn-wrap draws the hairline that follows them.
+ */
+.torn {
+  --tooth: 0.75rem;
+  padding-bottom: calc(var(--tooth) / 2 + 0.75rem);
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--tooth) 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--tooth) 100%;
+}
+
+.torn-wrap {
+  filter: drop-shadow(0 1px 0 var(--dan-rule));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .ticket-print {
+    position: static;
+  }
+
+  .torn {
+    -webkit-mask: none;
+    mask: none;
+  }
+
+  .torn-wrap {
+    filter: none;
+  }
+}
