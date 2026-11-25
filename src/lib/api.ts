@@ -2,10 +2,15 @@ import { normalizeTheme } from "./theme";
 import type { Menu, PlaceOrderInput, PublicOrder, Shop } from "./types";
 
 /**
- * The shop's public API. Each deployment of this site belongs to one shop and
- * is built with that shop's address in NEXT_PUBLIC_DAN_API_URL. This site is
- * open source and holds no secrets: the shop server decides every price and
- * refuses requests from sites it has not approved.
+ * The shop's public API. Each copy of this site belongs to one shop.
+ *
+ * Usually the site runs on the shop's own machine, behind the same address as
+ * the API (the shop server's web front sends /graphql to the API and the rest
+ * here), so the API is simply this site's own address. A copy hosted somewhere
+ * else is built with the shop's API address in NEXT_PUBLIC_DAN_API_URL.
+ *
+ * This site is open source and holds no secrets: the shop server decides every
+ * price and refuses requests from sites it has not approved.
  */
 
 export class ApiError extends Error {
@@ -18,8 +23,11 @@ export class ApiError extends Error {
   }
 }
 
-export function apiBase(): string | null {
-  const raw = process.env.NEXT_PUBLIC_DAN_API_URL?.trim().replace(/\/+$/, "");
+export function apiBase(
+  configured: string | undefined = process.env.NEXT_PUBLIC_DAN_API_URL,
+  here: string | undefined = typeof window === "undefined" ? undefined : window.location.origin,
+): string | null {
+  const raw = (configured?.trim() || here || "").replace(/\/+$/, "");
   if (!raw) return null;
   try {
     const url = new URL(raw);

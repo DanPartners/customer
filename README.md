@@ -26,13 +26,15 @@ npm run build
 
 ## Deploy one shop
 
-Each shop is its own deployment (for example on Vercel), with one setting:
+**On the shop's own machine (the usual way).** The [shop server](https://github.com/DanPartners/server)'s `compose.yaml` builds this site from this repo, pinned to a commit, and runs it beside the shop server. A small web front gives both one address: `/graphql`, its live channel and `/stripe/webhook` go to the shop's public API, everything else comes here. The shop's setup (`docker compose run --rm setup`) asks for that address. Nothing to set here: without `NEXT_PUBLIC_DAN_API_URL` the site calls the API at its own address.
+
+**Hosted somewhere else (for example Vercel).** Build it with one setting, and add this site's address to the shop server's `DAN_PUBLIC_ORIGINS`:
 
 | Variable | Example | Meaning |
 | --- | --- | --- |
 | `NEXT_PUBLIC_DAN_API_URL` | `https://api.goldendragon.example` | The shop server's public API, through its tunnel. No `/graphql`. |
 
-Then, on the shop server, add this site's address to `DAN_PUBLIC_ORIGINS`. The link and QR code a shop prints point at this site's address.
+The `Dockerfile` here is the image the shop server runs: a standalone Next.js build on Node 22, as a non-root user, on port 3001.
 
 ## What a customer sees
 

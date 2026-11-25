@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, call, isToken, loadOrder, placeOrder } from "./api";
+import { ApiError, apiBase, call, isToken, loadOrder, placeOrder } from "./api";
 
 function fake(body: unknown, status = 200) {
   const seen: { url: string; init: RequestInit }[] = [];
@@ -11,6 +11,14 @@ function fake(body: unknown, status = 200) {
 }
 
 describe("public API client", () => {
+  it("uses the shop's own address unless told otherwise", () => {
+    expect(apiBase(undefined, "https://order.goldendragon.example")).toBe("https://order.goldendragon.example");
+    expect(apiBase("", "https://order.goldendragon.example")).toBe("https://order.goldendragon.example");
+    expect(apiBase("https://api.shop.example/", "https://order.goldendragon.example")).toBe("https://api.shop.example");
+    expect(apiBase(undefined, undefined)).toBeNull();
+    expect(apiBase("javascript:alert(1)", undefined)).toBeNull();
+  });
+
   it("posts to /graphql without cookies or a referrer", async () => {
     const { fetchImpl, seen } = fake({ data: { order: { number: 1 } } });
     await loadOrder("a".repeat(32), { fetchImpl, base: "https://api.shop.example" });
