@@ -5,7 +5,9 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
  * The customer site against a real Dan shop server.
  *
  * The site's API address is set when the dev server starts
- * (NEXT_PUBLIC_DAN_API_URL, see playwright.config.ts). The server must be set
+ * (NEXT_PUBLIC_DAN_API_URL, see playwright.config.ts). To test the site as the
+ * shop's machine serves it, point baseURL and DAN_E2E_PUBLIC_URL both at the
+ * shop server's web front instead. The server must be set
  * up with `dan-server init --demo`, list http://localhost:3001 in
  * DAN_PUBLIC_ORIGINS, and, for the card test, use e2e/fake-stripe.mjs as its
  * Stripe (DAN_STRIPE_API_BASE). These tests change data on the server, so
@@ -62,14 +64,16 @@ async function checkout(page: Page, payWith: "card" | "at_shop", name: string) {
   await expect(page.getByTestId("order-status")).toBeVisible();
 }
 
-test("every page carries strict security headers with a fresh nonce", async ({ request }) => {
+test("every page carries strict security headers with a fresh nonce", async ({ request, baseURL }) => {
   const first = await request.get("/");
   const second = await request.get("/");
   const policy = first.headers()["content-security-policy"];
   expect(policy).toContain("frame-ancestors 'none'");
   expect(policy).toContain("object-src 'none'");
   expect(policy).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
-  expect(policy).toContain(publicUrl!);
+  // The API is either this site's own address (on the shop's machine) or its own one.
+  const site = new URL(baseURL!);
+  expect(policy).toContain(new URL(publicUrl!).origin === site.origin ? `ws://${site.host}` : publicUrl!);
   const nonce = (value: string) => value.match(/'nonce-([^']+)'/)?.[1];
   expect(nonce(policy)).not.toBe(nonce(second.headers()["content-security-policy"]));
   expect(first.headers()["referrer-policy"]).toBe("no-referrer");
