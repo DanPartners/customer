@@ -24,17 +24,15 @@ npm run lint
 npm run build
 ```
 
-## Deploy one shop
+## Deploy
 
-**On the shop's own machine (the usual way).** The [shop server](https://github.com/DanPartners/server)'s `compose.yaml` builds this site from this repo, pinned to a commit, and runs it beside the shop server. A small web front gives both one address: `/graphql`, its live channel and `/stripe/webhook` go to the shop's public API, everything else comes here. The shop's setup (`docker compose run --rm setup`) asks for that address. Nothing to set here: without `NEXT_PUBLIC_DAN_API_URL` the site calls the API at its own address.
+**In the Dan cloud (how shops run it).** The [Dan cloud](https://github.com/DanPartners/cloud)'s `compose.yaml` builds this repo, pinned to a tested commit, from the `Dockerfile` here (a standalone Next.js build on Node 22, non-root, port 3001). One copy serves every shop: each shop is at `https://<shop>.dan.partners`, where the cloud's front sends `/graphql`, its live channel and `/stripe/webhook` to that shop's customer API and everything else here. Without `NEXT_PUBLIC_DAN_API_URL` the site calls the API at its own address, so it always reaches the shop it was opened for.
 
-**Hosted somewhere else (for example Vercel).** Build it with one setting, and add this site's address to the shop server's `DAN_PUBLIC_ORIGINS`:
+**Somewhere else.** Build it with `NEXT_PUBLIC_DAN_API_URL` set to a shop's API address (for example `https://goldendragon.dan.partners`), and have the cloud accept this site's address (`DAN_SHOP_SITE`).
 
-| Variable | Example | Meaning |
-| --- | --- | --- |
-| `NEXT_PUBLIC_DAN_API_URL` | `https://api.goldendragon.example` | The shop server's public API, through its tunnel. No `/graphql`. |
+**Card payments** use Stripe Connect: the shop's API gives Dan's platform publishable key and the shop's connected account, and Stripe's card form opens on that account, so the money goes to the shop.
 
-The `Dockerfile` here is the image the shop server runs: a standalone Next.js build on Node 22, as a non-root user, on port 3001.
+**Order numbers:** an order placed here reaches the shop's machine within seconds and gets its number there; the order page says "awaiting number" until then and updates live. If the shop's machine is down, the cloud numbers it from 9001 after 20 seconds.
 
 ## What a customer sees
 

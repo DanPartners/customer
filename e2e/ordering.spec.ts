@@ -111,6 +111,8 @@ test("a pay-at-the-shop order is followed live until it is collected", async ({ 
   const status = page.getByTestId("order-status");
   await expect(status).toHaveAttribute("data-status", "new");
   await expect(page.getByTestId("order-payment")).toContainText("Pay at the shop");
+  // Placed through the Dan cloud, an order waits a moment for the shop's machine to number it; the number arrives live.
+  await expect(page.getByTestId("order-number")).toHaveText(/#\d+/, { timeout: 10_000 });
   const number = Number((await page.getByTestId("order-number").textContent())?.replace("#", ""));
   expect(number).toBeGreaterThan(0);
 
@@ -133,6 +135,8 @@ test("a table's link makes an eat-in order that is brought to that table", async
   await checkout(page, "at_shop", `Table ${Date.now()}`);
   await expect(page.getByTestId("order-table")).toContainText("Patio 2");
   await expect(page.getByTestId("order-payment")).toContainText("Pay at the counter before you leave");
+  // Placed through the Dan cloud, an order waits a moment for the shop's machine to number it; the number arrives live.
+  await expect(page.getByTestId("order-number")).toHaveText(/#\d+/, { timeout: 10_000 });
   const number = Number((await page.getByTestId("order-number").textContent())?.replace("#", ""));
   const orders = (await staff(request, "{ orders { id number fulfilment table } }")) as {
     orders: { id: string; number: number; fulfilment: string; table: string | null }[];
