@@ -7,7 +7,7 @@ describe("security policy addresses", () => {
     expect(behindTunnel).toEqual({ secure: true, host: "order.goldendragon.example" });
     expect(apiOrigins(undefined, behindTunnel)).toEqual(["wss://order.goldendragon.example"]);
     const onTheShopNetwork = visitedAddress(new Headers({ host: "192.168.1.20:8080" }), "http:");
-    expect(apiOrigins("", onTheShopNetwork)).toEqual(["ws://192.168.1.20:8080"]);
+    expect(apiOrigins("", onTheShopNetwork)).toEqual(["wss://192.168.1.20:8080", "ws://192.168.1.20:8080"]);
   });
 
   it("uses a configured API address instead", () => {

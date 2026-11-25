@@ -25,8 +25,10 @@ export function visitedAddress(headers: Headers, fallbackProtocol: string): { se
 export function apiOrigins(configured: string | undefined, visited: { secure: boolean; host: string | null }): string[] {
   const raw = configured?.trim();
   if (!raw) {
-    // Same address as this site: 'self' covers the HTTPS calls; name the WebSocket too, for older browsers.
-    return visited.host ? [`${visited.secure ? "wss:" : "ws:"}//${visited.host}`] : [];
+    // Same address as this site: 'self' covers the HTTPS calls; name the WebSocket too, for older
+    // browsers. The secure one always, in case a proxy on the way did not say the visit was HTTPS.
+    if (!visited.host) return [];
+    return visited.secure ? [`wss://${visited.host}`] : [`wss://${visited.host}`, `ws://${visited.host}`];
   }
   try {
     const url = new URL(raw);
