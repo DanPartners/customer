@@ -81,7 +81,7 @@ const ORDER =
 export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
   const data = await call<{ shop: Shop; menu: Menu }>(
     `query Shop {
-      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } stripePublishableKey }
+      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } stripePublishableKey stripeAccount }
       menu {
         categories { id nameEn nameZh sort }
         items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } }

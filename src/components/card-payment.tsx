@@ -12,14 +12,19 @@ import { Button, Notice } from "./ui";
  * to Stripe; this site and the shop server never see them. When Stripe says
  * the payment went through, `onPaid` runs so the page can ask the shop server
  * to check with Stripe, rather than wait for Stripe's notification.
+ *
+ * With Stripe Connect the payment belongs to the shop's own Stripe account
+ * (`stripeAccount`), opened through Dan's platform key.
  */
 export function CardPayment({
   publishableKey,
+  stripeAccount,
   clientSecret,
   theme,
   onPaid,
 }: {
   publishableKey: string;
+  stripeAccount?: string | null;
   clientSecret: string;
   theme: ThemeChoice;
   onPaid: () => void;
@@ -33,7 +38,7 @@ export function CardPayment({
 
   useEffect(() => {
     let cancelled = false;
-    void loadStripe(publishableKey).then((stripe) => {
+    void loadStripe(publishableKey, stripeAccount ? { stripeAccount } : undefined).then((stripe) => {
       if (cancelled || !stripe || !mountRef.current) return;
       const elements = stripe.elements({ clientSecret, appearance: stripeAppearance(theme), locale: locale === "zh-Hant" ? "zh-HK" : "en-GB" });
       const element = elements.create("payment", { layout: "tabs" });
@@ -44,7 +49,7 @@ export function CardPayment({
     return () => {
       cancelled = true;
     };
-  }, [publishableKey, clientSecret, theme, locale]);
+  }, [publishableKey, stripeAccount, clientSecret, theme, locale]);
 
   async function pay() {
     const current = stripeRef.current;

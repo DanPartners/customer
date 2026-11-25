@@ -31,6 +31,8 @@ export type Shop = {
   theme: ThemeChoice;
   payments: { card: boolean; atShop: boolean };
   stripePublishableKey: string | null;
+  /** With Stripe Connect, the shop's own Stripe account. */
+  stripeAccount?: string | null;
 };
 
 export type Category = { id: string; nameEn: string; nameZh: string; sort: number };

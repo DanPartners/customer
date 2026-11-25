@@ -129,6 +129,7 @@ function OrderStatus({ shop }: { shop: Shop }) {
           ) : null}
           <CardPayment
             publishableKey={shop.stripePublishableKey}
+            stripeAccount={shop.stripeAccount}
             clientSecret={order.clientSecret}
             theme={shop.theme}
             // Ask the shop server to check with Stripe now; the live channel then brings the result.
