@@ -8,7 +8,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 ARG NEXT_PUBLIC_DAN_API_URL=
-RUN npm run build
+# public/ may be empty, and git does not keep empty folders.
+RUN mkdir -p public && npm run build
 
 FROM node:22.23.5-bookworm-slim
 WORKDIR /app
