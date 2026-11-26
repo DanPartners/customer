@@ -84,7 +84,7 @@ export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: stri
       shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } stripePublishableKey stripeAccount }
       menu {
         categories { id nameEn nameZh sort }
-        items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } }
+        items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo }
       }
     }`,
     {},
@@ -110,4 +110,10 @@ export async function loadOrder(token: string, options?: { fetchImpl?: typeof fe
 /** A private link's code is 32 hex characters. Anything else is not looked up. */
 export function isToken(value: string): boolean {
   return /^[0-9a-f]{32}$/.test(value);
+}
+
+/** A dish photo's address: served by the Dan cloud at the shop's API address. Null for anything but a photo path. */
+export function photoUrl(photo: string | null | undefined, size: "thumb" | "large", base: string | null = apiBase()): string | null {
+  if (!photo || !base || !/^images\/[0-9a-f]{64}$/.test(photo)) return null;
+  return `${base}/${photo}/${size}.jpg`;
 }

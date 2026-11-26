@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { photoUrl } from "@/lib/api";
 import { add, count, lines, MAX_QTY, total } from "@/lib/basket";
 import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, useI18n } from "@/lib/i18n";
@@ -93,6 +94,7 @@ function Dish({ item, menu, qty }: { item: MenuItem; menu: Menu; qty: number }) 
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
+          <DishPhoto item={item} />
           <span className="font-display text-lg">{formatPence(item.pricePence)}</span>
           {item.soldOut ? (
             <span className="font-display text-sm tracking-[0.14em] text-accent-ink uppercase">{t("soldOut")}</span>
@@ -132,5 +134,52 @@ function Dish({ item, menu, qty }: { item: MenuItem; menu: Menu; qty: number }) 
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * The dish's photo, if it has one: small in the list, large when tapped.
+ * Nothing at all when there is none or it cannot load.
+ */
+function DishPhoto({ item }: { item: MenuItem }) {
+  const { t, locale } = useI18n();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [failed, setFailed] = useState(false);
+  const thumb = photoUrl(item.photo, "thumb");
+  const large = photoUrl(item.photo, "large");
+  if (!thumb || !large || failed) return null;
+  const name = primaryName(item.nameEn, item.nameZh, locale);
+  return (
+    <>
+      <button
+        type="button"
+        className="block size-24 cursor-zoom-in overflow-hidden border border-rule"
+        aria-label={`${t("photoOf")} ${name}`}
+        onClick={() => dialog.current?.showModal()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- sized by the cloud already */}
+        <img src={thumb} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailed(true)} data-testid={`photo-${item.number}`} />
+      </button>
+      <dialog
+        ref={dialog}
+        className="m-auto w-[min(40rem,calc(100%-2rem))] border border-rule bg-paper p-0 text-ink backdrop:bg-black/60"
+        aria-label={`${t("photoOf")} ${name}`}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) dialog.current?.close();
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- sized by the cloud already */}
+        <img src={large} alt={name} loading="lazy" decoding="async" className="block h-auto w-full" />
+        <div className="flex items-center justify-between gap-3 p-3">
+          <p className="min-w-0">
+            <span className="font-display text-accent-ink">{item.number}</span> {name}{" "}
+            <span className="font-zh text-ink-soft">{secondaryName(item.nameEn, item.nameZh, locale)}</span>
+          </p>
+          <button type="button" className="min-h-11 shrink-0 cursor-pointer border border-rule px-4 font-display" onClick={() => dialog.current?.close()}>
+            {t("close")}
+          </button>
+        </div>
+      </dialog>
+    </>
   );
 }

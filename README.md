@@ -38,7 +38,7 @@ npm run build
 
 | Screen | What it does |
 | --- | --- |
-| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A bar at the foot shows the basket. |
+| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A dish with a photo shows it beside the price; tapped, it opens large. Photos come from the shop's own address (`/images/...`, served by the Dan cloud); none is shown if it cannot load. A bar at the foot shows the basket. |
 | Checkout | The basket, editable. Every allergen in the order, including those inside set meals, and a box to confirm they have been checked (the server refuses an order without it). Name, phone, a note. Pay by card or at the shop. |
 | Order | The private link. The order number, the stage (received, being cooked, ready to collect, collected), the dishes and total, and how it is paid. For a card order, Stripe's card form until it is paid. Updates arrive live. |
 

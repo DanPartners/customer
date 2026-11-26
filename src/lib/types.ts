@@ -49,6 +49,8 @@ export type MenuItem = {
   soldOut: boolean;
   kind: "item" | "set";
   includes: { number: number; qty: number }[];
+  /** The dish's photo, `images/<hash>`, served at the shop's address. None without one. */
+  photo?: string | null;
 };
 
 export type Menu = { categories: Category[]; items: MenuItem[] };

@@ -47,7 +47,8 @@ export function proxy(request: NextRequest) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://js.stripe.com${dev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://*.stripe.com",
+    // Dish photos come from the shop's API address (the same address, unless set apart for development).
+    `img-src 'self' data: blob: ${apiOrigins(process.env.NEXT_PUBLIC_DAN_API_URL, visited).filter((origin) => origin.startsWith("http")).join(" ")} https://*.stripe.com`,
     "font-src 'self'",
     `connect-src 'self' ${apiOrigins(process.env.NEXT_PUBLIC_DAN_API_URL, visited).join(" ")} https://api.stripe.com https://*.stripe.com${dev ? " ws:" : ""}`,
     "frame-src https://js.stripe.com https://hooks.stripe.com",
