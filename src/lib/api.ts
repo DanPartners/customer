@@ -1,5 +1,5 @@
 import { normalizeTheme } from "./theme";
-import type { Menu, PlaceOrderInput, PublicOrder, Shop } from "./types";
+import type { DeliveryQuote, Menu, PlaceOrderInput, PublicOrder, Shop } from "./types";
 
 /**
  * The shop's public API. Each copy of this site belongs to one shop.
@@ -76,12 +76,12 @@ export async function call<T>(
 
 const THEME = "preset typeface custom { paper ink accent chrome }";
 export const ORDER =
-  "number status createdAt customerName notes fulfilment table address deliveryFeePence deliveryBy totalPence clientSecret payBy payment { method status } bankTransfer { accountName sortCode accountNumber reference amountPence } lines { number nameEn nameZh qty unitPricePence }";
+  "number status createdAt customerName notes fulfilment table address deliveryFeePence deliveryBy totalPence clientSecret payBy payment { method status } bankTransfer { accountName sortCode accountNumber reference amountPence } lines { number nameEn nameZh qty unitPricePence } courier { status trackingUrl dropoffEta } refund";
 
 export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
   const data = await call<{ shop: Shop; menu: Menu }>(
     `query Shop {
-      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer } stripePublishableKey stripeAccount }
+      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer deliveryQuoted deliveryFreeOverPence } stripePublishableKey stripeAccount }
       menu {
         categories { id nameEn nameZh sort }
         items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo }
@@ -100,6 +100,19 @@ export async function placeOrder(input: PlaceOrderInput, options?: { fetchImpl?:
     options,
   );
   return data.placeOrder;
+}
+
+/** What an Uber courier to this address costs now. Held for 20 minutes; pass its token with the order. */
+export async function deliveryQuote(
+  input: { address: string; postcode: string; phone: string; lines: { number: number; qty: number }[] },
+  options?: { fetchImpl?: typeof fetch; base?: string | null },
+): Promise<DeliveryQuote> {
+  const data = await call<{ deliveryQuote: DeliveryQuote }>(
+    "mutation Quote($input: DeliveryQuoteInput!) { deliveryQuote(input: $input) { token feePence expiresAt } }",
+    { input },
+    options,
+  );
+  return data.deliveryQuote;
 }
 
 export async function loadOrder(token: string, options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<PublicOrder> {

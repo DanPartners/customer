@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ApiError, placeOrder } from "@/lib/api";
+import { ApiError, deliveryQuote, placeOrder } from "@/lib/api";
 import { add, allergensIn, lines, MAX_ORDER_PENCE, total } from "@/lib/basket";
 import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, errorKey, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
 import { useTable } from "@/lib/table";
-import { offerFor, orderingOf, payWaysFor, postcodeLooksRight, type Way } from "@/lib/ordering";
-import type { Menu, PayWith, Shop } from "@/lib/types";
+import { deliveryFeeFor, offerFor, orderingOf, payWaysFor, postcodeLooksRight, type Way } from "@/lib/ordering";
+import type { DeliveryQuote, Menu, PayWith, Shop } from "@/lib/types";
 import { reloadShop } from "@/lib/use-shop";
 import { ShopFrame } from "./shop-frame";
 import { Button, Field, Kicker, Notice } from "./ui";
@@ -39,7 +39,10 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
   const [address, setAddress] = useState("");
   const [postcode, setPostcode] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; phone?: string; confirm?: string; address?: string; postcode?: string; submit?: string }>({});
+  /** An Uber quote, for the address it was asked for. */
+  const [quote, setQuote] = useState<{ for: string; quote: DeliveryQuote } | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; phone?: string; confirm?: string; address?: string; postcode?: string; quote?: string; submit?: string }>({});
   const [busy, setBusy] = useState(false);
 
   if (order.length === 0) {
@@ -54,6 +57,35 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
     );
   }
 
+  const quoted = way === "delivery" && Boolean(ordering.deliveryQuoted);
+  const addressKey = `${address.trim()}|${postcode.replace(/\s+/g, "").toUpperCase()}`;
+  const currentQuote = quoted && quote?.for === addressKey ? quote.quote : null;
+
+  /** Asks Uber, through the shop, what a courier to this address costs. */
+  async function getQuote() {
+    const next: typeof errors = {};
+    if (!address.trim()) next.address = t("needAddress");
+    if (!postcodeLooksRight(postcode)) next.postcode = t("needPostcode");
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 7 || digits.length > 15) next.phone = t("needPhone");
+    setErrors(next);
+    if (Object.keys(next).length) return;
+    setQuoting(true);
+    try {
+      const got = await deliveryQuote({
+        address: address.trim(),
+        postcode: postcode.trim(),
+        phone: phone.trim(),
+        lines: order.map((line) => ({ number: line.item.number, qty: line.qty })),
+      });
+      setQuote({ for: addressKey, quote: got });
+    } catch (error) {
+      setErrors({ quote: t(errorKey(error instanceof ApiError ? error.code : "error")) });
+    } finally {
+      setQuoting(false);
+    }
+  }
+
   async function send(event: React.FormEvent) {
     event.preventDefault();
     const next: typeof errors = {};
@@ -64,6 +96,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
     if (way === "delivery") {
       if (!address.trim()) next.address = t("needAddress");
       if (!postcodeLooksRight(postcode)) next.postcode = t("needPostcode");
+      if (quoted && !currentQuote) next.quote = t("needQuote");
     }
     setErrors(next);
     if (Object.keys(next).length || !way || !payWith) return;
@@ -79,6 +112,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         table: way === "eat_in" ? table : null,
         fulfilment: way === "delivery" ? "delivery" : "collection",
         ...(way === "delivery" ? { address: address.trim(), postcode: postcode.trim() } : {}),
+        ...(currentQuote ? { deliveryQuote: currentQuote.token } : {}),
       });
       writeLocal({ basket: {} });
       router.push(`/order/${placed.token}`);
@@ -86,13 +120,14 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
       const code = error instanceof ApiError ? error.code : "error";
       // A dish sold out after the menu loaded: show the menu as it is now.
       if (code === "sold_out" || code === "unknown_item") void reloadShop();
+      if (code === "quote_expired") setQuote(null);
       setErrors({ submit: t(errorKey(code)) });
       setBusy(false);
     }
   }
 
   const food = total(order);
-  const fee = way === "delivery" ? (ordering.deliveryFeePence ?? 0) : 0;
+  const fee = way === "delivery" ? (deliveryFeeFor(ordering, currentQuote?.feePence ?? null, food) ?? 0) : 0;
   const minimum = way === "delivery" ? (ordering.deliveryMinimumPence ?? 0) : 0;
   const sum = food + fee;
   const belowMinimum = food < minimum;
@@ -172,9 +207,11 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
               onChange={() => setWay(option)}
               title={t(option === "delivery" ? "wayDelivery" : "wayCollection")}
               hint={
-                option === "delivery"
-                  ? `${t("wayDeliveryHint")} ${t("deliveryFee")} ${formatPence(ordering.deliveryFeePence ?? 0)} · ${t("minimumOrder")} ${formatPence(ordering.deliveryMinimumPence ?? 0)}`
-                  : t("wayCollectionHint")
+                option !== "delivery"
+                  ? t("wayCollectionHint")
+                  : ordering.deliveryQuoted
+                    ? `${t("wayUberHint")} ${t("minimumOrder")} ${formatPence(ordering.deliveryMinimumPence ?? 0)}${ordering.deliveryFreeOverPence != null ? ` · ${t("freeDeliveryOver")} ${formatPence(ordering.deliveryFreeOverPence)}` : ""}`
+                    : `${t("wayDeliveryHint")} ${t("deliveryFee")} ${formatPence(ordering.deliveryFeePence ?? 0)} · ${t("minimumOrder")} ${formatPence(ordering.deliveryMinimumPence ?? 0)}`
               }
             />
           ))}
@@ -186,6 +223,22 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
           <h2 className="font-display text-xl">{t("deliveryAddress")}</h2>
           <Field id="address" label={t("deliveryAddress")} value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" maxLength={120} error={errors.address} />
           <Field id="postcode" label={t("postcode")} value={postcode} onChange={(e) => setPostcode(e.target.value)} autoComplete="postal-code" maxLength={10} error={errors.postcode} />
+          {quoted ? (
+            <div className="space-y-2" data-testid="delivery-quote">
+              {currentQuote ? (
+                <p>
+                  {t("deliveryFee")} <strong className="font-display" data-testid="quote-fee">{formatPence(fee)}</strong>{" "}
+                  <span className="text-sm text-ink-soft">{t("quoteHeld")}</span>
+                </p>
+              ) : (
+                <p className="text-sm text-ink-soft">{t("wayUberHint")}</p>
+              )}
+              <Button type="button" variant="line" disabled={quoting} onClick={() => void getQuote()} data-testid="get-quote">
+                {quoting ? t("sending") : t("getQuote")}
+              </Button>
+              {errors.quote ? <Notice tone="alert">{errors.quote}</Notice> : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
@@ -230,7 +283,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
       </fieldset>
 
       {errors.submit ? <Notice tone="alert">{errors.submit}</Notice> : null}
-      <Button type="submit" variant="accent" className="w-full" disabled={busy || sum > MAX_ORDER_PENCE || belowMinimum || !payWith} data-testid="send-order">
+      <Button type="submit" variant="accent" className="w-full" disabled={busy || sum > MAX_ORDER_PENCE || belowMinimum || !payWith || (quoted && !currentQuote)} data-testid="send-order">
         {busy ? t("sending") : payWith === "card" ? t("continueToPay") : t("send")}
       </Button>
     </form>

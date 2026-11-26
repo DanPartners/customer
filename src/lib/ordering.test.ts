@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { offerFor, payWaysFor, postcodeLooksRight } from "./ordering";
+import { deliveryFeeFor, offerFor, payWaysFor, postcodeLooksRight } from "./ordering";
 import type { Ordering } from "./types";
 
 const v01: Ordering = {
@@ -45,5 +45,20 @@ describe("ways to pay", () => {
     expect(postcodeLooksRight("wd17 1ab")).toBe(true);
     expect(postcodeLooksRight("M1 1AE")).toBe(true);
     expect(postcodeLooksRight("12345")).toBe(false);
+  });
+});
+
+describe("the delivery fee shown at checkout", () => {
+  const uber = { ...v01, delivery: true, deliveryQuoted: true, deliveryFeePence: null, deliveryMinimumPence: 1000, deliveryFreeOverPence: 3000 };
+  it("is the shop's fixed fee when it delivers itself", () => {
+    expect(deliveryFeeFor({ ...v01, delivery: true, deliveryFeePence: 250 }, null, 1200)).toBe(250);
+  });
+  it("is unknown for Uber until quoted, then the quote", () => {
+    expect(deliveryFeeFor(uber, null, 1200)).toBeNull();
+    expect(deliveryFeeFor(uber, 549, 1200)).toBe(549);
+  });
+  it("is free for food over the shop's amount, quoted or not", () => {
+    expect(deliveryFeeFor(uber, null, 3000)).toBe(0);
+    expect(deliveryFeeFor(uber, 549, 3120)).toBe(0);
   });
 });

@@ -49,6 +49,10 @@ export type Ordering = {
   cashOnDelivery: boolean;
   card: boolean;
   bankTransfer: boolean;
+  /** Delivery by an Uber courier, priced per address (ask for a quote). */
+  deliveryQuoted?: boolean;
+  /** Free delivery for food at or over this, when quoted. */
+  deliveryFreeOverPence?: number | null;
 };
 
 export type Category = { id: string; nameEn: string; nameZh: string; sort: number };
@@ -73,7 +77,7 @@ export type Menu = { categories: Category[]; items: MenuItem[] };
 
 export type PayWith = "card" | "at_shop" | "bank_transfer";
 
-export type OrderStatus = "awaiting_payment" | "new" | "preparing" | "ready" | "completed" | "expired" | "rejected";
+export type OrderStatus = "awaiting_payment" | "new" | "preparing" | "ready" | "completed" | "expired" | "rejected" | "cancelled";
 
 export type PublicOrder = {
   number: number | null;
@@ -93,7 +97,14 @@ export type PublicOrder = {
   payment: { method: PayWith; status: "due" | "paid" };
   clientSecret: string | null;
   payBy: string | null;
+  /** The Uber courier bringing it, once booked. */
+  courier?: { status: string; trackingUrl: string; dropoffEta: string } | null;
+  /** A cancelled card order: "refunded", or "failed" (the shop refunds it). */
+  refund?: string | null;
 };
+
+/** What an Uber courier to one address costs, held for a while. */
+export type DeliveryQuote = { token: string; feePence: number; expiresAt: string };
 
 export type PlaceOrderInput = {
   customerName: string;
@@ -108,4 +119,6 @@ export type PlaceOrderInput = {
   fulfilment?: "collection" | "delivery";
   address?: string;
   postcode?: string;
+  /** For a delivery priced per address: the quote's token. */
+  deliveryQuote?: string;
 };

@@ -38,6 +38,7 @@ const STATUS_COPY: Record<PublicOrder["status"], CopyKey> = {
   completed: "statusCompleted",
   expired: "statusExpired",
   rejected: "statusRejected",
+  cancelled: "statusCancelled",
 };
 
 /** A delivery is brought to the door, so its last steps read differently too. */
@@ -128,6 +129,14 @@ function OrderStatus({ shop }: { shop: Shop }) {
 
       {order.status === "awaiting_payment" && order.bankTransfer ? <BankTransfer details={order.bankTransfer} payBy={order.payBy} /> : null}
 
+      {order.status === "cancelled" && order.payment.method === "card" && order.payment.status === "paid" ? (
+        <Notice>
+          <span data-testid="order-refund">{t(order.refund === "refunded" ? "refundRefunded" : order.refund === "failed" ? "refundFailed" : "refundPending")}</span>
+        </Notice>
+      ) : null}
+
+      {delivering && order.status !== "cancelled" ? <Courier courier={order.courier ?? null} /> : null}
+
       {step >= 0 ? (
         <ol className="grid grid-cols-4 gap-1" aria-label={t("orderTitle")}>
           {STEPS.map((entry, index) => (
@@ -192,7 +201,7 @@ function OrderStatus({ shop }: { shop: Shop }) {
         </p>
       </section>
 
-      {order.status === "expired" || order.status === "completed" || order.status === "rejected" ? (
+      {order.status === "expired" || order.status === "completed" || order.status === "rejected" || order.status === "cancelled" ? (
         <Link href="/" className="inline-flex min-h-11 items-center font-display text-accent-ink underline">
           {t("orderAgain")}
         </Link>
@@ -240,6 +249,36 @@ function BankTransfer({ details, payBy }: { details: NonNullable<PublicOrder["ba
         <p className="mt-1 text-sm text-ink-soft">
           {t("payBy")} {formatTime(payBy, locale)}
         </p>
+      ) : null}
+    </section>
+  );
+}
+
+const COURIER_COPY: Partial<Record<string, CopyKey>> = {
+  pending: "courierBooked",
+  pickup: "courierToShop",
+  pickup_complete: "courierWithFood",
+  dropoff: "courierWithFood",
+  delivered: "courierDelivered",
+};
+
+/** The Uber courier bringing the order: where it has got to, and Uber's live map. */
+function Courier({ courier }: { courier: PublicOrder["courier"] }) {
+  const { t, locale } = useI18n();
+  const say = courier ? COURIER_COPY[courier.status] : undefined;
+  if (!courier || !say) return null;
+  const moving = courier.status !== "delivered";
+  return (
+    <section className="border border-rule bg-paper-raised p-4" data-testid="order-courier">
+      <h2 className="font-display text-lg">{t("courierTitle")}</h2>
+      <p className="mt-1" data-testid="courier-status">
+        {t(say)}
+        {moving && courier.dropoffEta ? ` ${t("courierArrives")} ${formatTime(courier.dropoffEta, locale)}.` : null}
+      </p>
+      {moving && courier.trackingUrl.startsWith("https://") ? (
+        <a href={courier.trackingUrl} target="_blank" rel="noreferrer noopener" className="mt-2 inline-flex min-h-11 items-center font-display text-accent-ink underline" data-testid="courier-track">
+          {t("courierTrack")}
+        </a>
       ) : null}
     </section>
   );

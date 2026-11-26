@@ -57,6 +57,16 @@ export function orderingOf(shop: { ordering?: Ordering | null; payments: { card:
   );
 }
 
+/**
+ * The delivery fee to show: the shop's fixed fee, or for Uber the quote for
+ * this address (free over the shop's amount). Null: not known until quoted.
+ */
+export function deliveryFeeFor(ordering: Ordering, quoteFeePence: number | null, foodPence: number): number | null {
+  if (!ordering.deliveryQuoted) return ordering.deliveryFeePence ?? 0;
+  if (ordering.deliveryFreeOverPence != null && foodPence >= ordering.deliveryFreeOverPence) return 0;
+  return quoteFeePence;
+}
+
 /** A UK postcode, roughly, as the server checks it. */
 export function postcodeLooksRight(value: string): boolean {
   return /^[A-Z][A-Z0-9]{1,3}[0-9][A-Z]{2}$/.test(value.replace(/\s+/g, "").toUpperCase());
