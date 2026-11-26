@@ -170,6 +170,8 @@ const en = {
   allergenSesame: "Sesame",
   allergenSoya: "Soya",
   allergenSulphites: "Sulphites",
+  menuEmptyTitle: "The menu is on its way",
+  menuEmptyLede: "This shop is still setting up. Please look again soon.",
 } as const;
 
 export type CopyKey = keyof typeof en;
@@ -341,6 +343,8 @@ const zhHant: { [K in CopyKey]: string } = {
   allergenSesame: "芝麻",
   allergenSoya: "大豆",
   allergenSulphites: "二氧化硫",
+  menuEmptyTitle: "餐牌即將推出",
+  menuEmptyLede: "店舖仍在準備中，請稍後再來。",
 };
 
 export const ALLERGEN_KEY: Record<Allergen, CopyKey> = {

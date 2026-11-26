@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { primaryName, secondaryName } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { errorKey } from "@/lib/i18n";
 import { adoptTableFromAddress, setTable, useTable } from "@/lib/table";
@@ -49,8 +50,8 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
           <Link href="/" className="min-w-0">
             {state.status === "ready" ? (
               <>
-                <p className="font-display text-3xl leading-none">{locale === "zh-Hant" ? state.shop.nameZh : state.shop.name}</p>
-                <p className="mt-1 font-zh text-accent-ink">{locale === "zh-Hant" ? state.shop.name : state.shop.nameZh}</p>
+                <p className="font-display text-3xl leading-none">{primaryName(state.shop.name, state.shop.nameZh, locale)}</p>
+                <p className="mt-1 font-zh text-accent-ink">{secondaryName(state.shop.name, state.shop.nameZh, locale)}</p>
               </>
             ) : (
               <p className="font-display text-3xl leading-none">&nbsp;</p>
@@ -81,7 +82,7 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
               {ordering}
             </span>
             <span>
-              {state.shop.address}, {state.shop.city}
+              {[state.shop.address, state.shop.city].filter(Boolean).join(", ")}
             </span>
             <a className="text-accent-ink underline" href={`tel:${state.shop.phone.replace(/\s/g, "")}`}>
               {state.shop.phone}

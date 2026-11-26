@@ -30,6 +30,16 @@ function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
   const visible = menu.items.filter((item) => item.categoryId === current).sort((a, b) => a.number - b.number);
   const inBasket = lines(basket, menu.items);
 
+  // A shop that has just joined has no menu yet.
+  if (menu.items.length === 0) {
+    return (
+      <div className="border-y border-rule py-12 text-center" data-testid="menu-empty">
+        <h1 className="font-display text-2xl">{t("menuEmptyTitle")}</h1>
+        <p className="mt-2 text-ink-soft">{t("menuEmptyLede")}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="pb-28">
       <h1 className="sr-only">{t("menu")}</h1>

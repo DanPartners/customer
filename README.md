@@ -59,6 +59,7 @@ A QR code on a table points at the site with the table's name: `https://order.yo
 - A table name is up to 10 letters (any language), numbers, spaces or hyphens: `3`, `12A`, `Patio 2`, `窗邊-1`. Anything else in the link is ignored, and the shop server checks it again.
 - The table is remembered for that browser tab only, so someone who scanned a table's code and later orders from home is not still "at table 3". The header has "Not at a table? Order for collection" to clear it.
 - Anyone can type any table name into the address. The staff see it on the docket and can check with the customer, as they would at the counter.
+- **A shop that has just joined.** With no dishes yet, the page says the menu is on its way. A shop or dish named in one language shows that name once, in either language; an address not yet filled in is left out.
 
 ## How it talks to the shop
 
