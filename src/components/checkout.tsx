@@ -9,6 +9,7 @@ import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, errorKey, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
 import { useTable } from "@/lib/table";
+import { offerFor, orderingOf, payWaysFor, postcodeLooksRight, type Way } from "@/lib/ordering";
 import type { Menu, PayWith, Shop } from "@/lib/types";
 import { reloadShop } from "@/lib/use-shop";
 import { ShopFrame } from "./shop-frame";
@@ -28,9 +29,17 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
-  const [payWith, setPayWith] = useState<PayWith>(shop.payments.card ? "card" : "at_shop");
+  const ordering = orderingOf(shop);
+  const offer = offerFor(ordering, table);
+  const [chosenWay, setWay] = useState<Way | null>(null);
+  const way: Way | null = offer.open && offer.reason !== "table_off" ? (chosenWay && offer.ways.includes(chosenWay) ? chosenWay : offer.ways[0]) : null;
+  const payWays = way ? payWaysFor(ordering, way) : [];
+  const [chosenPay, setPayWith] = useState<PayWith | null>(null);
+  const payWith: PayWith | null = chosenPay && payWays.includes(chosenPay) ? chosenPay : (payWays[0] ?? null);
+  const [address, setAddress] = useState("");
+  const [postcode, setPostcode] = useState("");
   const [confirmed, setConfirmed] = useState(false);
-  const [errors, setErrors] = useState<{ name?: string; phone?: string; confirm?: string; submit?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; phone?: string; confirm?: string; address?: string; postcode?: string; submit?: string }>({});
   const [busy, setBusy] = useState(false);
 
   if (order.length === 0) {
@@ -52,8 +61,12 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 7 || digits.length > 15) next.phone = t("needPhone");
     if (!confirmed) next.confirm = t("needConfirm");
+    if (way === "delivery") {
+      if (!address.trim()) next.address = t("needAddress");
+      if (!postcodeLooksRight(postcode)) next.postcode = t("needPostcode");
+    }
     setErrors(next);
-    if (Object.keys(next).length) return;
+    if (Object.keys(next).length || !way || !payWith) return;
     setBusy(true);
     try {
       const placed = await placeOrder({
@@ -63,7 +76,9 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         lines: order.map((line) => ({ number: line.item.number, qty: line.qty })),
         payWith,
         allergensConfirmed: true,
-        table,
+        table: way === "eat_in" ? table : null,
+        fulfilment: way === "delivery" ? "delivery" : "collection",
+        ...(way === "delivery" ? { address: address.trim(), postcode: postcode.trim() } : {}),
       });
       writeLocal({ basket: {} });
       router.push(`/order/${placed.token}`);
@@ -76,7 +91,15 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
     }
   }
 
-  const sum = total(order);
+  const food = total(order);
+  const fee = way === "delivery" ? (ordering.deliveryFeePence ?? 0) : 0;
+  const minimum = way === "delivery" ? (ordering.deliveryMinimumPence ?? 0) : 0;
+  const sum = food + fee;
+  const belowMinimum = food < minimum;
+  if (!way) {
+    // The shop frame already says why (not taking orders, or a table link to switch).
+    return null;
+  }
   return (
     <form onSubmit={send} className="space-y-8 pb-10" noValidate>
       <section>
@@ -107,6 +130,12 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
             </li>
           ))}
         </ul>
+        {fee ? (
+          <div className="mt-3 flex items-baseline justify-between text-ink-soft" data-testid="checkout-fee">
+            <span>{t("deliveryFee")}</span>
+            <span className="font-display">{formatPence(fee)}</span>
+          </div>
+        ) : null}
         <div className="mt-3 flex items-baseline justify-between">
           <Kicker>{t("total")}</Kicker>
           <span className="font-display text-3xl" data-testid="checkout-total">
@@ -122,7 +151,43 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
           </div>
         ) : null}
         {sum > MAX_ORDER_PENCE ? <div className="mt-3"><Notice tone="alert">{t("errTooLarge")}</Notice></div> : null}
+        {belowMinimum ? (
+          <div className="mt-3" data-testid="below-minimum">
+            <Notice tone="alert">
+              {t("minimumOrder")} {formatPence(minimum)}
+            </Notice>
+          </div>
+        ) : null}
       </section>
+
+      {offer.ways.length > 1 ? (
+        <fieldset className="space-y-2">
+          <legend className="font-display text-xl">{t("howToGet")}</legend>
+          {offer.ways.map((option) => (
+            <Choice
+              key={option}
+              name="way"
+              testId={`way-${option}`}
+              checked={way === option}
+              onChange={() => setWay(option)}
+              title={t(option === "delivery" ? "wayDelivery" : "wayCollection")}
+              hint={
+                option === "delivery"
+                  ? `${t("wayDeliveryHint")} ${t("deliveryFee")} ${formatPence(ordering.deliveryFeePence ?? 0)} · ${t("minimumOrder")} ${formatPence(ordering.deliveryMinimumPence ?? 0)}`
+                  : t("wayCollectionHint")
+              }
+            />
+          ))}
+        </fieldset>
+      ) : null}
+
+      {way === "delivery" ? (
+        <section className="space-y-4" data-testid="delivery-address">
+          <h2 className="font-display text-xl">{t("deliveryAddress")}</h2>
+          <Field id="address" label={t("deliveryAddress")} value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="street-address" maxLength={120} error={errors.address} />
+          <Field id="postcode" label={t("postcode")} value={postcode} onChange={(e) => setPostcode(e.target.value)} autoComplete="postal-code" maxLength={10} error={errors.postcode} />
+        </section>
+      ) : null}
 
       <section className="border border-rule bg-paper-raised p-4" data-testid="allergen-check">
         <h2 className="font-display text-xl">{t("allergenCheckTitle")}</h2>
@@ -147,14 +212,25 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
 
       <fieldset className="space-y-2">
         <legend className="font-display text-xl">{t("payWith")}</legend>
-        {shop.payments.card ? (
+        {payWays.includes("card") ? (
           <PayOption value="card" current={payWith} onChange={setPayWith} title={t("payCard")} hint={t("payCardHint")} />
         ) : null}
-        <PayOption value="at_shop" current={payWith} onChange={setPayWith} title={table ? t("payAtCounter") : t("payAtShop")} hint={table ? t("payAtCounterHint") : t("payAtShopHint")} />
+        {payWays.includes("at_shop") ? (
+          <PayOption
+            value="at_shop"
+            current={payWith}
+            onChange={setPayWith}
+            title={way === "delivery" ? t("payCashOnDelivery") : way === "eat_in" ? t("payAtCounter") : t("payAtShop")}
+            hint={way === "delivery" ? t("payCashOnDeliveryHint") : way === "eat_in" ? t("payAtCounterHint") : t("payAtShopHint")}
+          />
+        ) : null}
+        {payWays.includes("bank_transfer") ? (
+          <PayOption value="bank_transfer" current={payWith} onChange={setPayWith} title={t("payBank")} hint={t("payBankHint")} />
+        ) : null}
       </fieldset>
 
       {errors.submit ? <Notice tone="alert">{errors.submit}</Notice> : null}
-      <Button type="submit" variant="accent" className="w-full" disabled={busy || sum > MAX_ORDER_PENCE} data-testid="send-order">
+      <Button type="submit" variant="accent" className="w-full" disabled={busy || sum > MAX_ORDER_PENCE || belowMinimum || !payWith} data-testid="send-order">
         {busy ? t("sending") : payWith === "card" ? t("continueToPay") : t("send")}
       </Button>
     </form>
@@ -169,7 +245,7 @@ function PayOption({
   hint,
 }: {
   value: PayWith;
-  current: PayWith;
+  current: PayWith | null;
   onChange: (value: PayWith) => void;
   title: string;
   hint: string;
@@ -177,6 +253,18 @@ function PayOption({
   return (
     <label className={`flex min-h-14 cursor-pointer items-start gap-3 border p-3 ${current === value ? "border-ink bg-paper-raised" : "border-rule"}`}>
       <input type="radio" name="pay" className="mt-1 size-5" checked={current === value} onChange={() => onChange(value)} data-testid={`pay-${value}`} />
+      <span>
+        <span className="block font-display text-lg">{title}</span>
+        <span className="text-sm text-ink-soft">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+function Choice({ name, testId, checked, onChange, title, hint }: { name: string; testId: string; checked: boolean; onChange: () => void; title: string; hint: string }) {
+  return (
+    <label className={`flex min-h-14 cursor-pointer items-start gap-3 border p-3 ${checked ? "border-ink bg-paper-raised" : "border-rule"}`}>
+      <input type="radio" name={name} className="mt-1 size-5" checked={checked} onChange={onChange} data-testid={testId} />
       <span>
         <span className="block font-display text-lg">{title}</span>
         <span className="text-sm text-ink-soft">{hint}</span>

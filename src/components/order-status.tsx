@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiBase, isToken, loadOrder } from "@/lib/api";
+import { apiBase, isToken, loadOrder, ORDER } from "@/lib/api";
 import { formatPence, formatTime, primaryName, secondaryName } from "@/lib/format";
 import { errorKey, useI18n, type CopyKey } from "@/lib/i18n";
 import { live, type LiveStatus } from "@/lib/live";
@@ -12,8 +12,7 @@ import { CardPayment } from "./card-payment";
 import { ShopFrame } from "./shop-frame";
 import { Kicker, Notice } from "./ui";
 
-const ORDER_LIVE =
-  "subscription Order($token: String!) { order(token: $token) { number status createdAt customerName notes fulfilment table totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence } } }";
+const ORDER_LIVE = `subscription Order($token: String!) { order(token: $token) { ${ORDER} } }`;
 
 const STEPS: { status: PublicOrder["status"]; label: CopyKey }[] = [
   { status: "new", label: "stepReceived" },
@@ -38,6 +37,16 @@ const STATUS_COPY: Record<PublicOrder["status"], CopyKey> = {
   ready: "statusReady",
   completed: "statusCompleted",
   expired: "statusExpired",
+  rejected: "statusRejected",
+};
+
+/** A delivery is brought to the door, so its last steps read differently too. */
+const DELIVERY_LABELS: Partial<Record<CopyKey, CopyKey>> = {
+  stepReady: "stepOnItsWay",
+  stepCollected: "stepDelivered",
+  statusReady: "statusReadyDelivery",
+  statusCompleted: "statusDelivered",
+  payAtCollection: "payOnDelivery",
 };
 
 export function OrderStatusScreen() {
@@ -87,7 +96,8 @@ function OrderStatus({ shop }: { shop: Shop }) {
 
   const step = STEPS.findIndex((entry) => entry.status === order.status);
   const atTable = order.fulfilment === "eat_in";
-  const say = (key: CopyKey) => t((atTable && TABLE_LABELS[key]) || key);
+  const delivering = order.fulfilment === "delivery";
+  const say = (key: CopyKey) => t((atTable && TABLE_LABELS[key]) || (delivering && DELIVERY_LABELS[key]) || key);
   return (
     <div className="space-y-6 pb-10" data-testid="order-status" data-status={order.status}>
       <header className="border-b-[3px] border-ink pb-3">
@@ -103,8 +113,20 @@ function OrderStatus({ shop }: { shop: Shop }) {
             {t("eatInAt")} {order.table}
           </p>
         ) : null}
+        {delivering ? (
+          <div className="mt-1" data-testid="order-delivery">
+            <p>
+              {t("deliveringTo")} <span className="font-display">{order.address}</span>
+            </p>
+            {order.deliveryBy ? (
+              <p className="text-sm text-ink-soft">{t(order.deliveryBy === "uber_direct" ? "deliveredByUber" : "deliveredByShop")}</p>
+            ) : null}
+          </div>
+        ) : null}
         {connection === "offline" ? <p className="mt-1 text-sm text-ink-soft">{t("checking")}</p> : null}
       </header>
+
+      {order.status === "awaiting_payment" && order.bankTransfer ? <BankTransfer details={order.bankTransfer} payBy={order.payBy} /> : null}
 
       {step >= 0 ? (
         <ol className="grid grid-cols-4 gap-1" aria-label={t("orderTitle")}>
@@ -151,20 +173,26 @@ function OrderStatus({ shop }: { shop: Shop }) {
             </li>
           ))}
         </ul>
+        {order.deliveryFeePence ? (
+          <div className="mt-2 flex items-baseline justify-between text-ink-soft">
+            <span>{t("deliveryFee")}</span>
+            <span>{formatPence(order.deliveryFeePence)}</span>
+          </div>
+        ) : null}
         <div className="mt-3 flex items-baseline justify-between">
           <Kicker>{t("total")}</Kicker>
           <span className="font-display text-3xl">{formatPence(order.totalPence)}</span>
         </div>
         <p className="mt-1 text-sm" data-testid="order-payment">
-          {order.payment.method === "card"
-            ? order.payment.status === "paid"
-              ? t("paidByCard")
-              : t("statusAwaiting")
-            : say("payAtCollection")}
+          {order.payment.method === "at_shop"
+            ? say("payAtCollection")
+            : order.payment.status === "paid"
+              ? t(order.payment.method === "bank_transfer" ? "paidByBank" : "paidByCard")
+              : t("statusAwaiting")}
         </p>
       </section>
 
-      {order.status === "expired" || order.status === "completed" ? (
+      {order.status === "expired" || order.status === "completed" || order.status === "rejected" ? (
         <Link href="/" className="inline-flex min-h-11 items-center font-display text-accent-ink underline">
           {t("orderAgain")}
         </Link>
@@ -172,5 +200,47 @@ function OrderStatus({ shop }: { shop: Shop }) {
         <Notice>{t("keepLink")}</Notice>
       )}
     </div>
+  );
+}
+
+/**
+ * How to pay an unpaid bank-transfer order: the shop's details, the amount
+ * and the reference. Nothing here says it is paid: staff confirm that.
+ */
+function BankTransfer({ details, payBy }: { details: NonNullable<PublicOrder["bankTransfer"]>; payBy: string | null }) {
+  const { t, locale } = useI18n();
+  const rows: [CopyKey, string, string][] = [
+    ["bankName", details.accountName, "bank-name"],
+    ["bankSortCode", details.sortCode, "bank-sort-code"],
+    ["bankAccount", details.accountNumber, "bank-account"],
+    ["bankAmount", formatPence(details.amountPence), "bank-amount"],
+  ];
+  return (
+    <section className="border border-rule border-l-[6px] border-l-accent bg-paper-raised p-4" data-testid="bank-transfer" aria-labelledby="bank-title">
+      <h2 id="bank-title" className="font-display text-xl">
+        {t("bankTitle")}
+      </h2>
+      <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2">
+        {rows.map(([label, value, id]) => (
+          <div key={id} className="contents">
+            <dt className="text-ink-soft">{t(label)}</dt>
+            <dd className="font-display text-lg tabular-nums select-all" data-testid={id}>
+              {value}
+            </dd>
+          </div>
+        ))}
+        <dt className="text-ink-soft">{t("bankReference")}</dt>
+        <dd className="font-display text-2xl tracking-[0.08em] select-all" data-testid="bank-reference">
+          {details.reference}
+        </dd>
+      </dl>
+      <p className="mt-3 text-sm">{t("bankUseReference")}</p>
+      <p className="mt-1 text-sm font-display">{t("bankNotConfirmed")}</p>
+      {payBy ? (
+        <p className="mt-1 text-sm text-ink-soft">
+          {t("payBy")} {formatTime(payBy, locale)}
+        </p>
+      ) : null}
+    </section>
   );
 }

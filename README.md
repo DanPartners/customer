@@ -44,6 +44,14 @@ npm run build
 
 English or Traditional Chinese, switched in the header and remembered on the phone.
 
+### What the shop offers
+
+The site offers only what the owner switched on (the shop's `ordering`): collection, delivery (address and UK postcode, the shop's fee added, its minimum order checked), and eat-in from a table's link; and the ways to pay that are on: card, in person (at the counter, at the table, or cash to the shop's own driver), and bank transfer. The shop server refuses anything else, whatever the page sends.
+
+- No online methods on: the menu can be browsed, with "This shop is not taking online orders right now" and no Add buttons.
+- A table's link while table ordering is off: "This shop is not taking orders from tables right now", with "Order for collection" if collection is on; otherwise no order from that link.
+- **Bank transfer:** the order page shows the shop's account name, sort code, account number, the amount and a reference to use, and says the order is not confirmed until the shop sees the money. It updates live when staff mark it paid, or says the transfer was not received. Unpaid for 30 minutes, it lapses.
+
 ### Table links
 
 A QR code on a table points at the site with the table's name: `https://order.yourshop.example/?table=3`. The header then says **Eat in · Table 3**, the order is sent as eat-in for that table, and the order page reads "on its way to your table" and "served" instead of "ready to collect" and "collected". Paying at the shop becomes "pay at the counter before you leave".

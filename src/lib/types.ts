@@ -30,9 +30,25 @@ export type Shop = {
   phone: string;
   theme: ThemeChoice;
   payments: { card: boolean; atShop: boolean };
+  /** How the shop takes orders and payment online. Missing from older shop servers. */
+  ordering?: Ordering | null;
   stripePublishableKey: string | null;
   /** With Stripe Connect, the shop's own Stripe account. */
   stripeAccount?: string | null;
+};
+
+/** What the owner switched on, and could work. */
+export type Ordering = {
+  acceptingOrders: boolean;
+  table: boolean;
+  collection: boolean;
+  delivery: boolean;
+  deliveryFeePence: number | null;
+  deliveryMinimumPence: number | null;
+  payInPerson: boolean;
+  cashOnDelivery: boolean;
+  card: boolean;
+  bankTransfer: boolean;
 };
 
 export type Category = { id: string; nameEn: string; nameZh: string; sort: number };
@@ -55,9 +71,9 @@ export type MenuItem = {
 
 export type Menu = { categories: Category[]; items: MenuItem[] };
 
-export type PayWith = "card" | "at_shop";
+export type PayWith = "card" | "at_shop" | "bank_transfer";
 
-export type OrderStatus = "awaiting_payment" | "new" | "preparing" | "ready" | "completed" | "expired";
+export type OrderStatus = "awaiting_payment" | "new" | "preparing" | "ready" | "completed" | "expired" | "rejected";
 
 export type PublicOrder = {
   number: number | null;
@@ -65,8 +81,13 @@ export type PublicOrder = {
   createdAt: string;
   customerName: string;
   notes: string;
-  fulfilment: "collection" | "eat_in";
+  fulfilment: "collection" | "eat_in" | "delivery";
   table: string | null;
+  address?: string;
+  deliveryFeePence?: number | null;
+  deliveryBy?: "shop" | "uber_direct" | null;
+  /** How to pay an unpaid bank-transfer order. */
+  bankTransfer?: { accountName: string; sortCode: string; accountNumber: string; reference: string; amountPence: number } | null;
   lines: { number: number; nameEn: string; nameZh: string; qty: number; unitPricePence: number }[];
   totalPence: number;
   payment: { method: PayWith; status: "due" | "paid" };
@@ -83,4 +104,8 @@ export type PlaceOrderInput = {
   allergensConfirmed: boolean;
   /** Set when ordering from a table's link: the order is brought to it. */
   table: string | null;
+  /** Without a table: collection (the default) or delivery, with the address. */
+  fulfilment?: "collection" | "delivery";
+  address?: string;
+  postcode?: string;
 };

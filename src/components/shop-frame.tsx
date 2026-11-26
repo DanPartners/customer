@@ -6,9 +6,10 @@ import { useI18n } from "@/lib/i18n";
 import { errorKey } from "@/lib/i18n";
 import { adoptTableFromAddress, setTable, useTable } from "@/lib/table";
 import { retryShop, useShop } from "@/lib/use-shop";
+import { offerFor, orderingOf } from "@/lib/ordering";
 import type { Menu, Shop } from "@/lib/types";
 import { DanMark } from "./mark";
-import { Button } from "./ui";
+import { Button, Notice } from "./ui";
 
 /**
  * The page around every screen: the shop's name and contact details on its
@@ -19,7 +20,16 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
   const { t, locale, setLocale } = useI18n();
   const state = useShop();
   const table = useTable();
-  const ordering = table ? `${t("eatInAt")} ${table}` : t("collectionOnly");
+  const offer = state.status === "ready" ? offerFor(orderingOf(state.shop), table) : null;
+  const ordering = !offer
+    ? t("collectionOnly")
+    : !offer.open
+      ? t("orderingClosed")
+      : offer.ways.includes("eat_in")
+        ? `${t("eatInAt")} ${table}`
+        : offer.ways.includes("delivery")
+          ? t(offer.ways.includes("collection") ? "collectionOrDelivery" : "deliveryOnly")
+          : t("collectionOnly");
 
   // A table's QR link (`/?table=3`) says where the customer is sitting.
   useEffect(() => adoptTableFromAddress(window.location.search), []);
@@ -76,7 +86,7 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
             <a className="text-accent-ink underline" href={`tel:${state.shop.phone.replace(/\s/g, "")}`}>
               {state.shop.phone}
             </a>
-            {table ? (
+            {table && offer?.ways.includes("eat_in") && (offer.ways.length > 1 || orderingOf(state.shop).collection) ? (
               <button type="button" className="min-h-11 cursor-pointer text-accent-ink underline" onClick={() => setTable(null)} data-testid="not-at-table">
                 {t("notAtTable")}
               </button>
@@ -95,6 +105,21 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
                 {t("retry")}
               </Button>
             ) : null}
+          </div>
+        ) : null}
+        {offer && !offer.open ? (
+          <div className="mb-5" data-testid="not-ordering" data-reason={offer.reason}>
+            <Notice tone="alert">{t(offer.reason === "table_off" ? "tableOff" : offer.reason === "table_only" ? "tableOnly" : "notTakingOrders")}</Notice>
+          </div>
+        ) : null}
+        {offer?.open && offer.reason === "table_off" ? (
+          <div className="mb-5 space-y-2" data-testid="table-off">
+            <Notice>
+              {t("tableOff")} {t("tableOffCollection")}
+            </Notice>
+            <Button variant="line" onClick={() => setTable(null)}>
+              {t("collectionOnly")}
+            </Button>
           </div>
         ) : null}
         {state.status === "ready" ? children(state.shop, state.menu) : null}

@@ -75,13 +75,13 @@ export async function call<T>(
 }
 
 const THEME = "preset typeface custom { paper ink accent chrome }";
-const ORDER =
-  "number status createdAt customerName notes fulfilment table totalPence clientSecret payBy payment { method status } lines { number nameEn nameZh qty unitPricePence }";
+export const ORDER =
+  "number status createdAt customerName notes fulfilment table address deliveryFeePence deliveryBy totalPence clientSecret payBy payment { method status } bankTransfer { accountName sortCode accountNumber reference amountPence } lines { number nameEn nameZh qty unitPricePence }";
 
 export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
   const data = await call<{ shop: Shop; menu: Menu }>(
     `query Shop {
-      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } stripePublishableKey stripeAccount }
+      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer } stripePublishableKey stripeAccount }
       menu {
         categories { id nameEn nameZh sort }
         items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo }

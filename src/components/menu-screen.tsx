@@ -7,16 +7,23 @@ import { add, count, lines, MAX_QTY, total } from "@/lib/basket";
 import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
-import type { Menu, MenuItem } from "@/lib/types";
+import { offerFor, orderingOf } from "@/lib/ordering";
+import { useTable } from "@/lib/table";
+import type { Menu, MenuItem, Shop } from "@/lib/types";
 import { ShopFrame } from "./shop-frame";
 
 export function MenuScreen() {
-  return <ShopFrame>{(_, menu) => <MenuList menu={menu} />}</ShopFrame>;
+  return <ShopFrame>{(shop, menu) => <MenuList shop={shop} menu={menu} />}</ShopFrame>;
 }
 
-function MenuList({ menu }: { menu: Menu }) {
+function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
   const { t, locale } = useI18n();
   const { basket } = useLocal();
+  const table = useTable();
+  // Browsing stays open; adding dishes only when this visit can order
+  // (a table link the shop does not take must first switch to collection).
+  const offer = offerFor(orderingOf(shop), table);
+  const canOrder = offer.open && offer.reason !== "table_off";
   const categories = useMemo(() => [...menu.categories].sort((a, b) => a.sort - b.sort), [menu.categories]);
   const [active, setActive] = useState<string | null>(null);
   const current = active ?? categories[0]?.id ?? null;
@@ -43,11 +50,11 @@ function MenuList({ menu }: { menu: Menu }) {
 
       <ul className="divide-y divide-rule border-y border-rule">
         {visible.map((item) => (
-          <Dish key={item.id} item={item} menu={menu} qty={basket[item.number] ?? 0} />
+          <Dish key={item.id} item={item} menu={menu} qty={basket[item.number] ?? 0} canOrder={canOrder} />
         ))}
       </ul>
 
-      {inBasket.length > 0 ? (
+      {inBasket.length > 0 && canOrder ? (
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-rule bg-paper/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
           <div className="mx-auto max-w-3xl px-4 py-3">
             <Link
@@ -67,7 +74,7 @@ function MenuList({ menu }: { menu: Menu }) {
   );
 }
 
-function Dish({ item, menu, qty }: { item: MenuItem; menu: Menu; qty: number }) {
+function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: number; canOrder: boolean }) {
   const { t, locale } = useI18n();
   const { basket } = useLocal();
   const parts = item.includes
@@ -98,7 +105,7 @@ function Dish({ item, menu, qty }: { item: MenuItem; menu: Menu; qty: number }) 
           <span className="font-display text-lg">{formatPence(item.pricePence)}</span>
           {item.soldOut ? (
             <span className="font-display text-sm tracking-[0.14em] text-accent-ink uppercase">{t("soldOut")}</span>
-          ) : qty > 0 ? (
+          ) : !canOrder ? null : qty > 0 ? (
             <span className="flex items-center gap-1">
               <button
                 type="button"
