@@ -23,3 +23,19 @@ export function formatTime(iso: string, locale: string): string {
     hourCycle: "h23",
   }).format(new Date(iso));
 }
+
+/** An amount that may take off: "£1.20", "-£2.00". */
+export function signedPence(pence: number): string {
+  return pence < 0 ? `-${formatPence(-pence)}` : formatPence(pence);
+}
+
+/** A price change as a menu shows it: "+£1.50", "-£0.50", and nothing for no change. */
+export function plusPence(pence: number): string {
+  return pence === 0 ? "" : pence < 0 ? `-${formatPence(-pence)}` : `+${formatPence(pence)}`;
+}
+
+/** An add-on's own amount, before it is applied: "+10%", "-£1.00". `value` is pence, or hundredths of a percent. */
+export function amountLabel(addon: { kind: "fixed" | "percent"; value: number }): string {
+  const sign = addon.value < 0 ? "-" : "+";
+  return addon.kind === "percent" ? `${sign}${Number((Math.abs(addon.value) / 100).toFixed(2))}%` : `${sign}${formatPence(Math.abs(addon.value))}`;
+}

@@ -57,6 +57,62 @@ export type Ordering = {
 
 export type Category = { id: string; nameEn: string; nameZh: string; sort: number };
 
+/** One choice in a group of a dish's options. */
+export type OptionChoice = {
+  /** Its own within the dish. An order names choices by it. */
+  id: string;
+  nameEn: string;
+  nameZh: string;
+  /** What it adds to the dish's price, in pence. A minus takes off; 0 changes nothing. */
+  pricePence: number;
+  /** Allergens this choice brings that the dish itself may not have. */
+  allergens: Allergen[];
+};
+
+/** A group of a dish's options: "Size", "Extras". `one`: exactly one is taken; `any`: any number. */
+export type OptionGroup = { id: string; nameEn: string; nameZh: string; kind: "one" | "any"; choices: OptionChoice[] };
+
+/**
+ * One of the shop's add-ons for online orders: a named amount for the whole
+ * bill or for one dish, plus or minus (a service charge, a bag, an offer).
+ */
+export type Addon = {
+  id: string;
+  nameEn: string;
+  nameZh: string;
+  scope: "bill" | "dish";
+  kind: "fixed" | "percent";
+  /** Pence for a fixed amount; hundredths of a percent for a percentage (1000 is 10%). A minus takes off. */
+  value: number;
+  /** Ticked to begin with. */
+  auto: boolean;
+  /** Always applied: it cannot be taken off. */
+  required: boolean;
+};
+
+/** An add-on as the shop applied it, with what it came to. */
+export type AppliedAddon = { id: string; nameEn: string; nameZh: string; kind: "fixed" | "percent"; value: number; amountPence: number };
+
+/** One line of an order as the shop priced it. */
+export type PricedLine = {
+  number: number;
+  nameEn: string;
+  nameZh: string;
+  qty: number;
+  /** One of the dish, with the options chosen. */
+  unitPricePence: number;
+  options?: { choiceId?: string; nameEn: string; nameZh: string; pricePence: number }[];
+  addons?: AppliedAddon[];
+  /** What the line comes to: the dishes and its add-ons. Missing from older shop servers. */
+  totalPence?: number;
+};
+
+/** What a basket comes to, worked out by the shop: before any delivery fee. */
+export type Quote = { lines: PricedLine[]; addons: AppliedAddon[]; totalPence: number };
+
+/** A dish as an order asks for it: how many, and how it is taken. */
+export type OrderLineInput = { number: number; qty: number; options?: string[]; addons?: string[] };
+
 export type MenuItem = {
   id: string;
   number: number;
@@ -71,9 +127,11 @@ export type MenuItem = {
   includes: { number: number; qty: number }[];
   /** The dish's photo, `images/<hash>`, served at the shop's address. None without one. */
   photo?: string | null;
+  /** The dish's options, in the order they are asked. Missing or empty for most dishes. */
+  options?: OptionGroup[];
 };
 
-export type Menu = { categories: Category[]; items: MenuItem[] };
+export type Menu = { categories: Category[]; items: MenuItem[]; /** The shop's add-ons for online orders. Empty for most shops. */ addons: Addon[] };
 
 export type PayWith = "card" | "at_shop" | "bank_transfer";
 
@@ -92,7 +150,9 @@ export type PublicOrder = {
   deliveryBy?: "shop" | "uber_direct" | null;
   /** How to pay an unpaid bank-transfer order. */
   bankTransfer?: { accountName: string; sortCode: string; accountNumber: string; reference: string; amountPence: number } | null;
-  lines: { number: number; nameEn: string; nameZh: string; qty: number; unitPricePence: number }[];
+  lines: PricedLine[];
+  /** The add-ons on the bill, with what each came to. Already in the total. */
+  addons?: AppliedAddon[];
   totalPence: number;
   payment: { method: PayWith; status: "due" | "paid" };
   clientSecret: string | null;
@@ -110,7 +170,9 @@ export type PlaceOrderInput = {
   customerName: string;
   phone: string;
   notes: string;
-  lines: { number: number; qty: number }[];
+  lines: OrderLineInput[];
+  /** The bill add-ons ticked. Left out: the ones ticked to begin with. Required ones apply either way. */
+  addons?: string[];
   payWith: PayWith;
   allergensConfirmed: boolean;
   /** Set when ordering from a table's link: the order is brought to it. */

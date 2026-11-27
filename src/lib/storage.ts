@@ -12,7 +12,7 @@ export type Locale = "en" | "zh-Hant";
 export type Local = { locale: Locale; basket: Basket };
 
 const KEY = "dan.customer.v1";
-const EMPTY: Local = { locale: "en", basket: {} };
+const EMPTY: Local = { locale: "en", basket: [] };
 let cache: Local | null = null;
 const listeners = new Set<() => void>();
 

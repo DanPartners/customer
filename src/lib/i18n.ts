@@ -172,6 +172,20 @@ const en = {
   allergenSulphites: "Sulphites",
   menuEmptyTitle: "The menu is on its way",
   menuEmptyLede: "This shop is still setting up. Please look again soon.",
+  chooseOne: "Choose one",
+  chooseAny: "Choose any",
+  addOns: "Add-ons",
+  included: "Included",
+  each: "each",
+  howMany: "How many",
+  addToOrder: "Add to order",
+  choose: "Choose",
+  inOrder: "in your order",
+  optionsHint: "Choose",
+  priceWorking: "Working out the price…",
+  priceFailed: "The price could not be worked out. Check your connection and try again.",
+  errChoice: "The menu has changed. Check your order and try again.",
+  cancelChoice: "Cancel",
 } as const;
 
 export type CopyKey = keyof typeof en;
@@ -345,6 +359,20 @@ const zhHant: { [K in CopyKey]: string } = {
   allergenSulphites: "二氧化硫",
   menuEmptyTitle: "餐牌即將推出",
   menuEmptyLede: "店舖仍在準備中，請稍後再來。",
+  chooseOne: "選一項",
+  chooseAny: "可選多項",
+  addOns: "附加項目",
+  included: "已包括",
+  each: "每份",
+  howMany: "數量",
+  addToOrder: "加入訂單",
+  choose: "選擇",
+  inOrder: "已在訂單",
+  optionsHint: "可選",
+  priceWorking: "正在計算價錢…",
+  priceFailed: "未能計算價錢。請檢查網絡後再試。",
+  errChoice: "餐牌已更改。請檢查訂單後再試。",
+  cancelChoice: "取消",
 };
 
 export const ALLERGEN_KEY: Record<Allergen, CopyKey> = {
@@ -369,6 +397,8 @@ export function errorKey(code: string): CopyKey {
   const map: Record<string, CopyKey> = {
     busy: "errBusy",
     sold_out: "errSoldOut",
+    bad_options: "errChoice",
+    bad_addon: "errChoice",
     unknown_item: "errSoldOut",
     rate_limited: "errLimited",
     too_large_order: "errTooLarge",

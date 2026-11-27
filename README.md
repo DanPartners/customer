@@ -38,9 +38,9 @@ npm run build
 
 | Screen | What it does |
 | --- | --- |
-| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A dish with a photo shows it beside the price; tapped, it opens large. Photos come from the shop's own address (`/images/...`, served by the Dan cloud); none is shown if it cannot load. A bar at the foot shows the basket. |
-| Checkout | The basket, editable. Every allergen in the order, including those inside set meals, and a box to confirm they have been checked (the server refuses an order without it). Name, phone, a note. Pay by card or at the shop. |
-| Order | The private link. The order number, the stage (received, being cooked, ready to collect, collected), the dishes and total, and how it is paid. For a card order, Stripe's card form until it is paid. Updates arrive live. |
+| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A dish with options (a size, extras) says so and asks how it is taken before it is added: see [Options and add-ons](#options-and-add-ons). A dish with a photo shows it beside the price; tapped, it opens large. Photos come from the shop's own address (`/images/...`, served by the Dan cloud); none is shown if it cannot load. A bar at the foot shows the basket. |
+| Checkout | The basket, editable: each line with what was chosen for it. The shop's add-ons for the bill, and the total. Every allergen in the order, including those inside set meals and those a chosen option brings, and a box to confirm they have been checked (the server refuses an order without it). Name, phone, a note. Pay by card or at the shop. |
+| Order | The private link. The order number, the stage (received, being cooked, ready to collect, collected), the dishes with what was chosen, the add-ons on the bill, the total, and how it is paid. For a card order, Stripe's card form until it is paid. Updates arrive live. |
 
 English or Traditional Chinese, switched in the header and remembered on the phone.
 
@@ -51,6 +51,18 @@ The site offers only what the owner switched on (the shop's `ordering`): collect
 - No online methods on: the menu can be browsed, with "This shop is not taking online orders right now" and no Add buttons.
 - A table's link while table ordering is off: "This shop is not taking orders from tables right now", with "Order for collection" if collection is on; otherwise no order from that link.
 - **Bank transfer:** the order page shows the shop's account name, sort code, account number, the amount and a reference to use, and says the order is not confirmed until the shop sees the money. It updates live when staff mark it paid, or says the transfer was not received. Unpaid for 30 minutes, it lapses.
+
+### Options and add-ons
+
+A shop's owner can give a dish **options** and the shop **add-ons** (in the dashboard). The site shows what the owner set, for online orders only.
+
+- **Options** are groups of choices on a dish: "Size", "Extras". A group is choose one (the first is ticked to begin with) or choose any. Each choice says what it adds to the price and the allergens it brings, before it is chosen. Such a dish has a **Choose** button, which opens the choices, the add-ons for a dish, and how many. The same dish taken two ways is two lines of the order.
+- **Add-ons** are named amounts: a service charge, a carrier bag, an offer. One for a dish is offered when the dish is chosen; one for the whole bill is at the checkout. The owner decides which are ticked to begin with and which are **required**. A required one cannot be unticked: on a dish it is shown ticked and "Included", on the bill it is simply a line.
+- **The bill is the shop's.** Where a shop has add-ons, the checkout asks the shop server what the order comes to (`quote`) each time the order changes, and shows the server's own figures: each line, each add-on, the total. The site does not work add-ons out itself, so the menu's basket bar shows no figure for such a shop. Until the server has answered, the total reads "…" and the order cannot be sent; if it cannot answer, the page says so with **Try again**. Where a shop has no add-ons, the total is the dishes with their choices, added up here as before.
+- **What is sent** is still only what was chosen: dish numbers, quantities, the ids of the choices and of the add-ons ticked. Never a price. The server prices the order again when it is placed, and a card is charged that.
+- **If the menu changes under an order** (a choice removed, an add-on withdrawn), the line that no longer fits is left out of the basket rather than sent to be refused, and a refusal from the server (`bad_options`, `bad_addon`) reloads the menu.
+- A basket saved in the browser before options (dish number to quantity) is still read.
+- A shop with no options and no add-ons gets orders exactly as before, so a copy of this site pointed at an older shop server still works: it asks for the menu without the new fields when the server does not know them.
 
 ### Table links
 
@@ -63,10 +75,10 @@ A QR code on a table points at the site with the table's name: `https://order.yo
 
 ## How it talks to the shop
 
-- **Queries over HTTPS** to `<api>/graphql`: the shop, the menu, placing an order. The contract is the server's [`public.graphql`](https://github.com/DanPartners/server/blob/main/public.graphql); this side is [`src/lib/api.ts`](src/lib/api.ts).
+- **Queries over HTTPS** to `<api>/graphql`: the shop, the menu with the shop's add-ons, what a basket comes to (`quote`), placing an order. The contract is the server's [`public.graphql`](https://github.com/DanPartners/server/blob/main/public.graphql); this side is [`src/lib/api.ts`](src/lib/api.ts).
 - **Live over a WebSocket** at `<api>/graphql/ws` (`graphql-transport-ws`): the order page subscribes to its own order and gets each change as it happens. It reconnects by itself, and the subscription always starts with the order as it is now, so nothing is missed. [`src/lib/live.ts`](src/lib/live.ts) is the same client the dashboard uses.
 - **Nothing polls.** The menu is loaded once per visit. If a dish sells out in the meantime, the server refuses the order with `sold_out` and the checkout reloads the menu.
-- **Prices are the server's.** The site sends dish numbers and quantities. The totals it shows are for the customer's convenience; the server prices the order itself.
+- **Prices are the server's.** The site sends dish numbers, quantities and what was chosen. Where a shop has add-ons the totals shown are the server's own (`quote`); otherwise they are added up here for the customer's convenience. Either way the server prices the order itself when it is placed.
 
 ## Card payments
 
@@ -88,7 +100,7 @@ Chinese text uses the phone's own Chinese fonts. The site ships none, which keep
 
 ## Tests
 
-`e2e/ordering.spec.ts` runs the site against a real shop server: security headers, the shop's theme, sold-out dishes, a pay-at-the-shop order followed live to collection, a table link's eat-in order followed until it is served, and a card order confirmed by a signed Stripe notification. It changes data, so never point it at a shop in service. Set the server up with `dan-server init --demo`, start `e2e/fake-stripe.mjs` and point the server's `DAN_STRIPE_API_BASE` at it, then:
+`e2e/options.spec.ts` sets a dish's options and the shop's add-ons through the staff API, then orders as a customer and checks the order that reaches the counter is the bill the page showed, to the penny. `e2e/ordering.spec.ts` runs the site against a real shop server: security headers, the shop's theme, sold-out dishes, a pay-at-the-shop order followed live to collection, a table link's eat-in order followed until it is served, and a card order confirmed by a signed Stripe notification. It changes data, so never point it at a shop in service. Set the server up with `dan-server init --demo`, start `e2e/fake-stripe.mjs` and point the server's `DAN_STRIPE_API_BASE` at it, then:
 
 ```bash
 DAN_E2E_STAFF_URL=http://127.0.0.1:2283 DAN_E2E_PUBLIC_URL=http://127.0.0.1:2284 \
@@ -100,6 +112,5 @@ Without those variables the tests are skipped.
 
 ## Not built yet
 
-- Delivery. Collection, and eat-in from a table's link, only.
 - A way for the owner to pause online ordering on a busy night.
 - Adding a stamp to the customer's card from an online order.

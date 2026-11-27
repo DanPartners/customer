@@ -1,5 +1,5 @@
 import { normalizeTheme } from "./theme";
-import type { DeliveryQuote, Menu, PlaceOrderInput, PublicOrder, Shop } from "./types";
+import type { DeliveryQuote, Menu, OrderLineInput, PlaceOrderInput, PublicOrder, Quote, Shop } from "./types";
 
 /**
  * The shop's public API. Each copy of this site belongs to one shop.
@@ -75,27 +75,69 @@ export async function call<T>(
 }
 
 const THEME = "preset typeface custom { paper ink accent chrome }";
-export const ORDER =
+const APPLIED = "id nameEn nameZh kind value amountPence";
+/** What every shop server knows of an order. */
+const ORDER_PLAIN =
   "number status createdAt customerName notes fulfilment table address deliveryFeePence deliveryBy totalPence clientSecret payBy payment { method status } bankTransfer { accountName sortCode accountNumber reference amountPence } lines { number nameEn nameZh qty unitPricePence } courier { status trackingUrl dropoffEta } refund";
+/** With what was chosen for each dish and the add-ons on the bill. */
+const ORDER_PRICED = `${ORDER_PLAIN.replace("lines { number nameEn nameZh qty unitPricePence }", `lines { number nameEn nameZh qty unitPricePence totalPence options { nameEn nameZh pricePence } addons { ${APPLIED} } }`)} addons { ${APPLIED} }`;
+
+/**
+ * Whether the shop server knows dish options and add-ons. It does when it is
+ * the version this site was built for (they are deployed together); a copy of
+ * this site pointed at an older shop server finds out when it loads the shop.
+ */
+let priced = true;
+
+/** The order fields to ask for, for queries and the live channel alike. */
+export const orderFields = () => (priced ? ORDER_PRICED : ORDER_PLAIN);
+
+const SHOP_FIELDS = `name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer deliveryQuoted deliveryFreeOverPence } stripePublishableKey stripeAccount`;
+const ITEM_PLAIN = "id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo";
 
 export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
-  const data = await call<{ shop: Shop; menu: Menu }>(
-    `query Shop {
-      shop { name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer deliveryQuoted deliveryFreeOverPence } stripePublishableKey stripeAccount }
+  const ask = (withOptions: boolean) =>
+    call<{ shop: Shop; menu: Omit<Menu, "addons">; addons?: Menu["addons"] }>(
+      `query Shop {
+      shop { ${SHOP_FIELDS} }
       menu {
         categories { id nameEn nameZh sort }
-        items { id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo }
-      }
+        items { ${ITEM_PLAIN}${withOptions ? " options { id nameEn nameZh kind choices { id nameEn nameZh pricePence allergens } }" : ""} }
+      }${withOptions ? "\n      addons { id nameEn nameZh scope kind value auto required }" : ""}
     }`,
-    {},
+      {},
+      options,
+    );
+  let data;
+  try {
+    data = await ask(true);
+    priced = true;
+  } catch (error) {
+    // A shop server from before options and add-ons does not know those fields: the menu without them.
+    if (!(error instanceof ApiError) || error.code !== "error") throw error;
+    data = await ask(false);
+    priced = false;
+  }
+  return { shop: { ...data.shop, theme: normalizeTheme(data.shop.theme) }, menu: { ...data.menu, addons: data.addons ?? [] } };
+}
+
+/**
+ * What a basket comes to, worked out by the shop: each line, the add-ons on
+ * the bill, and the total before any delivery fee. `addons`: the bill
+ * add-ons ticked; left out, the ones ticked to begin with.
+ */
+export async function quote(input: { lines: OrderLineInput[]; addons?: string[] }, options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<Quote> {
+  const data = await call<{ quote: Quote }>(
+    `query Quote($input: QuoteInput!) { quote(input: $input) { totalPence addons { ${APPLIED} } lines { number nameEn nameZh qty unitPricePence totalPence options { choiceId nameEn nameZh pricePence } addons { ${APPLIED} } } } }`,
+    { input },
     options,
   );
-  return { shop: { ...data.shop, theme: normalizeTheme(data.shop.theme) }, menu: data.menu };
+  return data.quote;
 }
 
 export async function placeOrder(input: PlaceOrderInput, options?: { fetchImpl?: typeof fetch; base?: string | null }) {
   const data = await call<{ placeOrder: { token: string; order: PublicOrder } }>(
-    `mutation Place($input: PlaceOrderInput!) { placeOrder(input: $input) { token order { ${ORDER} } } }`,
+    `mutation Place($input: PlaceOrderInput!) { placeOrder(input: $input) { token order { ${orderFields()} } } }`,
     { input },
     options,
   );
@@ -104,7 +146,7 @@ export async function placeOrder(input: PlaceOrderInput, options?: { fetchImpl?:
 
 /** What an Uber courier to this address costs now. Held for 20 minutes; pass its token with the order. */
 export async function deliveryQuote(
-  input: { address: string; postcode: string; phone: string; lines: { number: number; qty: number }[] },
+  input: { address: string; postcode: string; phone: string; lines: OrderLineInput[]; addons?: string[] },
   options?: { fetchImpl?: typeof fetch; base?: string | null },
 ): Promise<DeliveryQuote> {
   const data = await call<{ deliveryQuote: DeliveryQuote }>(
@@ -116,7 +158,7 @@ export async function deliveryQuote(
 }
 
 export async function loadOrder(token: string, options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<PublicOrder> {
-  const data = await call<{ order: PublicOrder }>(`query Order($token: String!) { order(token: $token) { ${ORDER} } }`, { token }, options);
+  const data = await call<{ order: PublicOrder }>(`query Order($token: String!) { order(token: $token) { ${orderFields()} } }`, { token }, options);
   return data.order;
 }
 

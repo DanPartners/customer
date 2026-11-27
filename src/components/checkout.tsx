@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { ApiError, deliveryQuote, placeOrder } from "@/lib/api";
-import { add, allergensIn, lines, MAX_ORDER_PENCE, total } from "@/lib/basket";
-import { formatPence, primaryName, secondaryName } from "@/lib/format";
+import { useEffect, useMemo, useState } from "react";
+import { ApiError, deliveryQuote, placeOrder, quote as askQuote } from "@/lib/api";
+import { add, allergensIn, lines, MAX_ORDER_PENCE, orderLines, total } from "@/lib/basket";
+import { amountLabel, formatPence, primaryName, secondaryName, signedPence } from "@/lib/format";
 import { ALLERGEN_KEY, errorKey, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
 import { useTable } from "@/lib/table";
 import { deliveryFeeFor, offerFor, orderingOf, payWaysFor, postcodeLooksRight, type Way } from "@/lib/ordering";
-import type { DeliveryQuote, Menu, PayWith, Shop } from "@/lib/types";
+import type { DeliveryQuote, Menu, OrderLineInput, PayWith, Quote, Shop } from "@/lib/types";
 import { reloadShop } from "@/lib/use-shop";
 import { ShopFrame } from "./shop-frame";
 import { Button, Field, Kicker, Notice } from "./ui";
@@ -24,8 +24,45 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
   const router = useRouter();
   const { basket } = useLocal();
   const table = useTable();
-  const order = lines(basket, menu.items);
+  const order = useMemo(() => lines(basket, menu.items, menu.addons), [basket, menu.items, menu.addons]);
   const allergens = allergensIn(order, menu.items);
+  // The shop's add-ons for the whole bill. One that is not required is the customer's to tick.
+  const billAddons = useMemo(() => menu.addons.filter((addon) => addon.scope === "bill"), [menu.addons]);
+  const [billTicked, setBillTicked] = useState<string[] | null>(null);
+  const billIds = useMemo(
+    () => billAddons.filter((addon) => !addon.required && (billTicked ? billTicked.includes(addon.id) : addon.auto)).map((addon) => addon.id),
+    [billAddons, billTicked],
+  );
+  // A shop with options or add-ons is told exactly how each dish is taken; any other gets a dish and how many.
+  const explicit = menu.addons.length > 0 || menu.items.some((item) => (item.options?.length ?? 0) > 0);
+  const wanted = useMemo(() => orderLines(order, explicit), [order, explicit]);
+  // Where the shop has add-ons, the shop works the bill out. Asked again whenever the order changes.
+  const quoteKey = menu.addons.length > 0 && wanted.length > 0 ? JSON.stringify({ lines: wanted, addons: billIds }) : "";
+  const [answer, setAnswer] = useState<{ key: string; quote: Quote | null; code: string | null } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!quoteKey) return;
+    let stale = false;
+    // A moment's wait, so three quick taps on "+" ask once.
+    const timer = window.setTimeout(() => {
+      askQuote(JSON.parse(quoteKey) as { lines: OrderLineInput[]; addons: string[] }).then(
+        (got) => {
+          if (!stale) setAnswer({ key: quoteKey, quote: got, code: null });
+        },
+        (error: unknown) => {
+          if (stale) return;
+          const code = error instanceof ApiError ? error.code : "error";
+          // The menu has changed under the order: show it as it is now.
+          if (["sold_out", "unknown_item", "bad_options", "bad_addon"].includes(code)) void reloadShop();
+          setAnswer({ key: quoteKey, quote: null, code });
+        },
+      );
+    }, 250);
+    return () => {
+      stale = true;
+      window.clearTimeout(timer);
+    };
+  }, [quoteKey, attempt]);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -76,7 +113,8 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         address: address.trim(),
         postcode: postcode.trim(),
         phone: phone.trim(),
-        lines: order.map((line) => ({ number: line.item.number, qty: line.qty })),
+        lines: wanted,
+        ...(billAddons.length > 0 ? { addons: billIds } : {}),
       });
       setQuote({ for: addressKey, quote: got });
     } catch (error) {
@@ -106,7 +144,8 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         customerName: name.trim(),
         phone: phone.trim(),
         notes: notes.trim(),
-        lines: order.map((line) => ({ number: line.item.number, qty: line.qty })),
+        lines: wanted,
+        ...(billAddons.length > 0 ? { addons: billIds } : {}),
         payWith,
         allergensConfirmed: true,
         table: way === "eat_in" ? table : null,
@@ -114,23 +153,27 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         ...(way === "delivery" ? { address: address.trim(), postcode: postcode.trim() } : {}),
         ...(currentQuote ? { deliveryQuote: currentQuote.token } : {}),
       });
-      writeLocal({ basket: {} });
+      writeLocal({ basket: [] });
       router.push(`/order/${placed.token}`);
     } catch (error) {
       const code = error instanceof ApiError ? error.code : "error";
       // A dish sold out after the menu loaded: show the menu as it is now.
-      if (code === "sold_out" || code === "unknown_item") void reloadShop();
+      if (["sold_out", "unknown_item", "bad_options", "bad_addon"].includes(code)) void reloadShop();
       if (code === "quote_expired") setQuote(null);
       setErrors({ submit: t(errorKey(code)) });
       setBusy(false);
     }
   }
 
-  const food = total(order);
+  // The shop's own figures where it has add-ons; otherwise the dishes with their choices, which is the whole bill.
+  const priced = quoteKey ? (answer?.key === quoteKey ? answer.quote : null) : null;
+  const priceFailed = quoteKey && answer?.key === quoteKey && !answer.quote ? (answer.code ?? "error") : null;
+  const known = quoteKey ? priced !== null : true;
+  const food = quoteKey ? (priced?.totalPence ?? 0) : total(order);
   const fee = way === "delivery" ? (deliveryFeeFor(ordering, currentQuote?.feePence ?? null, food) ?? 0) : 0;
   const minimum = way === "delivery" ? (ordering.deliveryMinimumPence ?? 0) : 0;
   const sum = food + fee;
-  const belowMinimum = food < minimum;
+  const belowMinimum = known && food < minimum;
   if (!way) {
     // The shop frame already says why (not taking orders, or a table link to switch).
     return null;
@@ -143,28 +186,77 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         </Link>
         <h1 className="mt-2 border-b-[3px] border-ink pb-3 font-display text-3xl leading-none">{t("yourOrder")}</h1>
         <ul className="mt-3 divide-y divide-rule border-b border-rule" data-testid="checkout-lines">
-          {order.map(({ item, qty, totalPence }) => (
-            <li key={item.number} className="py-3">
-              <div className="flex items-baseline gap-3">
-                <span className="w-10 shrink-0 font-display text-lg text-accent-ink">{item.number}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block">{primaryName(item.nameEn, item.nameZh, locale)}</span>
-                  <span className="font-zh text-sm text-ink-soft">{secondaryName(item.nameEn, item.nameZh, locale)}</span>
+          {order.map((line, at) => {
+            const { item, qty, entry } = line;
+            // The shop's line, where it has priced the order: the add-ons on the dish are its to say.
+            const shops = priced?.lines[at];
+            const onDish = shops?.addons ?? [];
+            return (
+              <li key={line.key} className="py-3" data-testid="checkout-line">
+                <div className="flex items-baseline gap-3">
+                  <span className="w-10 shrink-0 font-display text-lg text-accent-ink">{item.number}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block">{primaryName(item.nameEn, item.nameZh, locale)}</span>
+                    <span className="font-zh text-sm text-ink-soft">{secondaryName(item.nameEn, item.nameZh, locale)}</span>
+                    {line.choices.length > 0 ? (
+                      <span className="block text-sm text-ink-soft" data-testid="line-choices">
+                        {line.choices.map((choice) => primaryName(choice.nameEn, choice.nameZh, locale)).join(" · ")}
+                      </span>
+                    ) : null}
+                    {(shops ? onDish : line.addons).map((addon) => (
+                      <span key={addon.id} className="block text-sm text-ink-soft" data-testid="line-addon">
+                        + {primaryName(addon.nameEn, addon.nameZh, locale)} {"amountPence" in addon ? signedPence(addon.amountPence) : amountLabel(addon)}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="shrink-0 text-right font-display" data-testid="line-total">
+                    {quoteKey ? (shops?.totalPence != null ? formatPence(shops.totalPence) : "…") : formatPence(line.unitPence * qty)}
+                  </span>
+                </div>
+                <span className="mt-2 flex items-center justify-end gap-1">
+                  <button type="button" aria-label={`${t("remove")}: ${item.number}`} className="min-h-11 min-w-11 cursor-pointer border border-rule" onClick={() => writeLocal({ basket: add(basket, entry, -1) })}>
+                    −
+                  </button>
+                  <span className="w-7 text-center font-display">{qty}</span>
+                  <button type="button" aria-label={`${t("add")}: ${item.number}`} className="min-h-11 min-w-11 cursor-pointer border border-rule" onClick={() => writeLocal({ basket: add(basket, entry) })}>
+                    +
+                  </button>
                 </span>
-                <span className="shrink-0 text-right font-display">{formatPence(totalPence)}</span>
-              </div>
-              <span className="mt-2 flex items-center justify-end gap-1">
-                <button type="button" aria-label={`${t("remove")}: ${item.number}`} className="min-h-11 min-w-11 cursor-pointer border border-rule" onClick={() => writeLocal({ basket: add(basket, item.number, -1) })}>
-                  −
-                </button>
-                <span className="w-7 text-center font-display">{qty}</span>
-                <button type="button" aria-label={`${t("add")}: ${item.number}`} className="min-h-11 min-w-11 cursor-pointer border border-rule" onClick={() => writeLocal({ basket: add(basket, item.number) })}>
-                  +
-                </button>
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
+        {billAddons.length > 0 ? (
+          <fieldset className="mt-3 divide-y divide-rule border-b border-rule" data-testid="checkout-addons">
+            <legend className="sr-only">{t("addOns")}</legend>
+            {billAddons.map((addon) => {
+              const applied = priced?.addons.find((entry) => entry.id === addon.id);
+              const ticked = addon.required || billIds.includes(addon.id);
+              return (
+                <label key={addon.id} className={`flex min-h-12 items-center gap-3 py-2 ${addon.required ? "" : "cursor-pointer"}`}>
+                  {/* A required add-on is a line of the bill, not a choice. */}
+                  {addon.required ? null : (
+                    <input
+                      type="checkbox"
+                      className="size-5 shrink-0"
+                      checked={ticked}
+                      onChange={() => setBillTicked(ticked ? billIds.filter((id) => id !== addon.id) : [...billIds, addon.id])}
+                      data-testid={`bill-addon-${addon.id}`}
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    {primaryName(addon.nameEn, addon.nameZh, locale)}
+                    <span className="ml-2 font-zh text-sm text-ink-soft">{secondaryName(addon.nameEn, addon.nameZh, locale)}</span>
+                    <span className="ml-2 text-sm text-ink-soft">{amountLabel(addon)}</span>
+                  </span>
+                  <span className="shrink-0 font-display" data-testid={`bill-addon-amount-${addon.id}`}>
+                    {ticked ? (applied ? signedPence(applied.amountPence) : "…") : ""}
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
+        ) : null}
         {fee ? (
           <div className="mt-3 flex items-baseline justify-between text-ink-soft" data-testid="checkout-fee">
             <span>{t("deliveryFee")}</span>
@@ -173,11 +265,19 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
         ) : null}
         <div className="mt-3 flex items-baseline justify-between">
           <Kicker>{t("total")}</Kicker>
-          <span className="font-display text-3xl" data-testid="checkout-total">
-            {formatPence(sum)}
+          <span className="font-display text-3xl" data-testid="checkout-total" aria-live="polite">
+            {known ? formatPence(sum) : "…"}
           </span>
         </div>
-        <p className="mt-1 text-sm text-ink-soft">{t("totalNote")}</p>
+        <p className="mt-1 text-sm text-ink-soft">{known || priceFailed ? t("totalNote") : t("priceWorking")}</p>
+        {priceFailed ? (
+          <div className="mt-3 space-y-2" data-testid="price-failed">
+            <Notice tone="alert">{["sold_out", "unknown_item", "bad_options", "bad_addon", "rate_limited"].includes(priceFailed) ? t(errorKey(priceFailed)) : t("priceFailed")}</Notice>
+            <Button type="button" variant="line" onClick={() => setAttempt((n) => n + 1)}>
+              {t("retry")}
+            </Button>
+          </div>
+        ) : null}
         {table ? (
           <div className="mt-3" data-testid="checkout-table">
             <Notice>
@@ -185,7 +285,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
             </Notice>
           </div>
         ) : null}
-        {sum > MAX_ORDER_PENCE ? <div className="mt-3"><Notice tone="alert">{t("errTooLarge")}</Notice></div> : null}
+        {known && sum > MAX_ORDER_PENCE ? <div className="mt-3"><Notice tone="alert">{t("errTooLarge")}</Notice></div> : null}
         {belowMinimum ? (
           <div className="mt-3" data-testid="below-minimum">
             <Notice tone="alert">
@@ -283,7 +383,7 @@ function Checkout({ shop, menu }: { shop: Shop; menu: Menu }) {
       </fieldset>
 
       {errors.submit ? <Notice tone="alert">{errors.submit}</Notice> : null}
-      <Button type="submit" variant="accent" className="w-full" disabled={busy || sum > MAX_ORDER_PENCE || belowMinimum || !payWith || (quoted && !currentQuote)} data-testid="send-order">
+      <Button type="submit" variant="accent" className="w-full" disabled={busy || !known || sum > MAX_ORDER_PENCE || belowMinimum || !payWith || (quoted && !currentQuote)} data-testid="send-order">
         {busy ? t("sending") : payWith === "card" ? t("continueToPay") : t("send")}
       </Button>
     </form>

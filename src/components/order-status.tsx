@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiBase, isToken, loadOrder, ORDER } from "@/lib/api";
-import { formatPence, formatTime, primaryName, secondaryName } from "@/lib/format";
+import { apiBase, isToken, loadOrder, orderFields } from "@/lib/api";
+import { formatPence, formatTime, primaryName, secondaryName, signedPence } from "@/lib/format";
 import { errorKey, useI18n, type CopyKey } from "@/lib/i18n";
 import { live, type LiveStatus } from "@/lib/live";
 import type { PublicOrder, Shop } from "@/lib/types";
@@ -12,7 +12,8 @@ import { CardPayment } from "./card-payment";
 import { ShopFrame } from "./shop-frame";
 import { Kicker, Notice } from "./ui";
 
-const ORDER_LIVE = `subscription Order($token: String!) { order(token: $token) { ${ORDER} } }`;
+/** Asked when the page opens: by then the shop has loaded, so the fields are the ones its server knows. */
+const orderLive = () => `subscription Order($token: String!) { order(token: $token) { ${orderFields()} } }`;
 
 const STEPS: { status: PublicOrder["status"]; label: CopyKey }[] = [
   { status: "new", label: "stepReceived" },
@@ -72,7 +73,7 @@ function OrderStatus({ shop }: { shop: Shop }) {
     if (!isToken(token) || !base) return;
     return live<{ order: PublicOrder }>({
       base,
-      query: ORDER_LIVE,
+      query: orderLive(),
       variables: { token },
       onData: ({ order: next }) => {
         setOrder(next);
@@ -171,17 +172,34 @@ function OrderStatus({ shop }: { shop: Shop }) {
 
       <section>
         <ul className="divide-y divide-rule border-y border-rule">
-          {order.lines.map((line) => (
-            <li key={line.number} className="flex gap-3 py-2">
+          {order.lines.map((line, at) => (
+            // The same dish taken two ways is two lines: its place in the order tells them apart.
+            <li key={`${line.number}-${at}`} className="flex gap-3 py-2" data-testid="status-line">
               <span className="w-10 font-display text-accent-ink">{line.number}</span>
               <span className="min-w-0 flex-1">
                 {primaryName(line.nameEn, line.nameZh, locale)}
                 <span className="ml-2 font-zh text-sm text-ink-soft">{secondaryName(line.nameEn, line.nameZh, locale)}</span>
+                {(line.options?.length ?? 0) > 0 ? (
+                  <span className="block text-sm text-ink-soft" data-testid="status-choices">
+                    {line.options!.map((option) => primaryName(option.nameEn, option.nameZh, locale)).join(" · ")}
+                  </span>
+                ) : null}
+                {(line.addons ?? []).map((addon) => (
+                  <span key={addon.id} className="block text-sm text-ink-soft" data-testid="status-line-addon">
+                    + {primaryName(addon.nameEn, addon.nameZh, locale)} {signedPence(addon.amountPence)}
+                  </span>
+                ))}
               </span>
               <span>×{line.qty}</span>
             </li>
           ))}
         </ul>
+        {(order.addons ?? []).map((addon) => (
+          <div key={addon.id} className="mt-2 flex items-baseline justify-between text-ink-soft" data-testid="status-addon">
+            <span>{primaryName(addon.nameEn, addon.nameZh, locale)}</span>
+            <span>{signedPence(addon.amountPence)}</span>
+          </div>
+        ))}
         {order.deliveryFeePence ? (
           <div className="mt-2 flex items-baseline justify-between text-ink-soft">
             <span>{t("deliveryFee")}</span>

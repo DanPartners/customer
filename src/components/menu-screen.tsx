@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { photoUrl } from "@/lib/api";
-import { add, count, lines, MAX_QTY, total } from "@/lib/basket";
+import { add, count, countOf, lines, MAX_QTY, plain, total } from "@/lib/basket";
 import { formatPence, primaryName, secondaryName } from "@/lib/format";
 import { ALLERGEN_KEY, useI18n } from "@/lib/i18n";
 import { useLocal, writeLocal } from "@/lib/storage";
 import { offerFor, orderingOf } from "@/lib/ordering";
 import { useTable } from "@/lib/table";
-import type { Menu, MenuItem, Shop } from "@/lib/types";
+import type { Addon, Menu, MenuItem, Shop } from "@/lib/types";
+import { DishChooser } from "./dish-chooser";
 import { ShopFrame } from "./shop-frame";
 
 export function MenuScreen() {
@@ -28,7 +29,9 @@ function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
   const [active, setActive] = useState<string | null>(null);
   const current = active ?? categories[0]?.id ?? null;
   const visible = menu.items.filter((item) => item.categoryId === current).sort((a, b) => a.number - b.number);
-  const inBasket = lines(basket, menu.items);
+  const inBasket = lines(basket, menu.items, menu.addons);
+  // The shop's add-ons for a dish. Where any can be ticked, every dish asks how it is taken.
+  const dishAddons = useMemo(() => menu.addons.filter((addon) => addon.scope === "dish"), [menu.addons]);
 
   // A shop that has just joined has no menu yet.
   if (menu.items.length === 0) {
@@ -60,7 +63,7 @@ function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
 
       <ul className="divide-y divide-rule border-y border-rule">
         {visible.map((item) => (
-          <Dish key={item.id} item={item} menu={menu} qty={basket[item.number] ?? 0} canOrder={canOrder} />
+          <Dish key={item.id} item={item} menu={menu} qty={countOf(basket, item.number)} canOrder={canOrder} dishAddons={dishAddons} />
         ))}
       </ul>
 
@@ -75,7 +78,12 @@ function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
               <span className="font-display text-lg">
                 {t("basketView")} · {count(inBasket)} {t("items")}
               </span>
-              <span className="font-display text-xl">{formatPence(total(inBasket))}</span>
+              {/* Where the shop has add-ons the bill is the shop's to work out, at the checkout: no figure here that could be wrong. */}
+              {menu.addons.length === 0 ? (
+                <span className="font-display text-xl" data-testid="basket-total">
+                  {formatPence(total(inBasket))}
+                </span>
+              ) : null}
             </Link>
           </div>
         </div>
@@ -84,9 +92,13 @@ function MenuList({ shop, menu }: { shop: Shop; menu: Menu }) {
   );
 }
 
-function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: number; canOrder: boolean }) {
+function Dish({ item, menu, qty, canOrder, dishAddons }: { item: MenuItem; menu: Menu; qty: number; canOrder: boolean; dishAddons: Addon[] }) {
   const { t, locale } = useI18n();
   const { basket } = useLocal();
+  const [choosing, setChoosing] = useState(false);
+  const groups = item.options ?? [];
+  // A dish with options, or an add-on the customer may tick: it is chosen before it is added.
+  const asks = groups.length > 0 || dishAddons.some((addon) => !addon.required);
   const parts = item.includes
     .map((include) => menu.items.find((entry) => entry.number === include.number))
     .filter((part): part is MenuItem => Boolean(part));
@@ -106,6 +118,11 @@ function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: 
               {t("setIncludes")}: {parts.map((part) => primaryName(part.nameEn, part.nameZh, locale)).join(", ")}
             </p>
           ) : null}
+          {groups.length > 0 ? (
+            <p className="mt-1 text-sm text-ink-soft" data-testid={`options-${item.number}`}>
+              {t("optionsHint")}: {groups.map((group) => primaryName(group.nameEn, group.nameZh, locale)).join(" · ")}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs tracking-wide text-ink-soft uppercase" data-testid={`allergens-${item.number}`}>
             {item.allergens.length ? `${t("allergens")}: ${item.allergens.map((a) => t(ALLERGEN_KEY[a])).join(" · ")}` : t("noAllergens")}
           </p>
@@ -115,13 +132,31 @@ function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: 
           <span className="font-display text-lg">{formatPence(item.pricePence)}</span>
           {item.soldOut ? (
             <span className="font-display text-sm tracking-[0.14em] text-accent-ink uppercase">{t("soldOut")}</span>
-          ) : !canOrder ? null : qty > 0 ? (
+          ) : !canOrder ? null : asks ? (
+            <>
+              <button
+                type="button"
+                aria-label={`${t("choose")}: ${label}`}
+                className="min-h-11 cursor-pointer bg-ink px-4 font-display text-paper"
+                onClick={() => setChoosing(true)}
+                data-testid={`choose-${item.number}`}
+              >
+                {qty > 0 ? t("add") : t("choose")}
+              </button>
+              {/* Taken more than one way, it has no single count to step: the checkout changes each line. */}
+              {qty > 0 ? (
+                <span className="text-sm text-ink-soft" aria-live="polite" data-testid={`in-order-${item.number}`}>
+                  {qty} {t("inOrder")}
+                </span>
+              ) : null}
+            </>
+          ) : qty > 0 ? (
             <span className="flex items-center gap-1">
               <button
                 type="button"
                 aria-label={`${t("remove")}: ${label}`}
                 className="min-h-11 min-w-11 cursor-pointer border border-rule font-display text-lg"
-                onClick={() => writeLocal({ basket: add(basket, item.number, -1) })}
+                onClick={() => writeLocal({ basket: add(basket, plain(item.number), -1) })}
               >
                 −
               </button>
@@ -133,7 +168,7 @@ function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: 
                 aria-label={`${t("add")}: ${label}`}
                 disabled={qty >= MAX_QTY}
                 className="min-h-11 min-w-11 cursor-pointer border border-rule font-display text-lg disabled:opacity-40"
-                onClick={() => writeLocal({ basket: add(basket, item.number) })}
+                onClick={() => writeLocal({ basket: add(basket, plain(item.number)) })}
               >
                 +
               </button>
@@ -143,13 +178,21 @@ function Dish({ item, menu, qty, canOrder }: { item: MenuItem; menu: Menu; qty: 
               type="button"
               aria-label={`${t("add")}: ${label}`}
               className="min-h-11 cursor-pointer bg-ink px-4 font-display text-paper"
-              onClick={() => writeLocal({ basket: add(basket, item.number) })}
+              onClick={() => writeLocal({ basket: add(basket, plain(item.number)) })}
             >
               {t("add")}
             </button>
           )}
         </div>
       </div>
+      {choosing ? (
+        <DishChooser
+          item={item}
+          dishAddons={dishAddons}
+          onClose={() => setChoosing(false)}
+          onAdd={(choice) => writeLocal({ basket: add(basket, { number: item.number, options: choice.options, addons: choice.addons }, choice.qty) })}
+        />
+      ) : null}
     </li>
   );
 }
