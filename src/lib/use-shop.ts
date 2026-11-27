@@ -31,7 +31,9 @@ async function refresh() {
     set({ status: "ready", shop, menu });
   } catch (error) {
     // Keep showing the last good menu if a refresh fails.
-    if (state.status !== "ready") set({ status: "error", code: error instanceof ApiError ? error.code : "error" });
+    // No shop at this address (DAN-45) is not a missing order: its own words.
+    const code = error instanceof ApiError ? (error.code === "not_found" ? "no_shop" : error.code) : "error";
+    if (state.status !== "ready") set({ status: "error", code });
   }
 }
 

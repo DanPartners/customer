@@ -101,7 +101,7 @@ export function ShopFrame({ children }: { children: (shop: Shop, menu: Menu) => 
         {state.status === "error" ? (
           <div className="space-y-4" role="alert" data-testid="shop-error">
             <p className="text-lg">{t(errorKey(state.code))}</p>
-            {state.code !== "not_configured" ? (
+            {state.code !== "not_configured" && state.code !== "no_shop" ? (
               <Button variant="line" onClick={retryShop}>
                 {t("retry")}
               </Button>

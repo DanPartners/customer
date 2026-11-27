@@ -13,6 +13,8 @@ export type LiveStatus = "connecting" | "live" | "offline";
 export type LiveOptions<T> = {
   /** The API's base address, http(s)://…; the channel is at /graphql/ws. */
   base: string;
+  /** Added to the channel's address, e.g. the shop a customer's channel is for (`shop`). */
+  params?: Record<string, string>;
   /** Sent in connection_init. The dashboard sends its sign-in token here. */
   payload?: Record<string, unknown>;
   query: string;
@@ -35,8 +37,9 @@ type ServerMessage =
   | { type: "error"; id: string; payload: { message?: string; extensions?: { code?: string } }[] }
   | { type: "complete"; id: string };
 
-export function liveUrl(base: string): string {
-  return `${base.replace(/\/+$/, "").replace(/^http/, "ws")}/graphql/ws`;
+export function liveUrl(base: string, params?: Record<string, string>): string {
+  const search = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : "";
+  return `${base.replace(/\/+$/, "").replace(/^http/, "ws")}/graphql/ws${search}`;
 }
 
 /** Starts the channel. Returns a function that stops it for good. */
@@ -59,7 +62,7 @@ export function live<T>(options: LiveOptions<T>): () => void {
     if (stopped) return;
     status("connecting");
     let acknowledged = false;
-    const ws = new Impl(liveUrl(options.base), "graphql-transport-ws");
+    const ws = new Impl(liveUrl(options.base, options.params), "graphql-transport-ws");
     socket = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: "connection_init", payload: options.payload ?? {} }));
     ws.onmessage = (event) => {

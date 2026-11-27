@@ -100,5 +100,6 @@ describe("live channel", () => {
   it("turns an http address into a ws one", () => {
     expect(liveUrl("http://192.168.1.20:2283")).toBe("ws://192.168.1.20:2283/graphql/ws");
     expect(liveUrl("https://shop.example/dan/")).toBe("wss://shop.example/dan/graphql/ws");
+    expect(liveUrl("https://cloud.dan.partners", { shop: "goldendragon.dan.partners" })).toBe("wss://cloud.dan.partners/graphql/ws?shop=goldendragon.dan.partners");
   });
 });

@@ -2,7 +2,7 @@
 
 The site a shop's customers order from. They open the shop's link (or scan its QR code), see the bilingual menu with allergens, order for collection (or, from a table's QR code, to eat in), pay by card or at the shop, and follow their order live until it is ready.
 
-Each shop has its own copy of this site, at its own address, talking to that shop's [Dan server](https://github.com/DanPartners/server) through the server's **public API**. The counter side is the [dashboard](https://github.com/DanPartners/dashboard).
+One copy of this site serves every shop, at each shop's own address (`https://<shop>.dan.partners`, or the shop's own domain). It talks to the [Dan cloud](https://github.com/DanPartners/cloud)'s one address, `https://cloud.dan.partners`, naming the shop it was opened for; that shop's own **public API** (the [Dan server](https://github.com/DanPartners/server)'s, which the cloud runs for each shop) answers (DAN-45). The counter side is the [dashboard](https://github.com/DanPartners/dashboard).
 
 This repository is open source (MIT). It holds no secrets and needs none.
 
@@ -13,10 +13,10 @@ npm install
 ```
 
 ```bash
-NEXT_PUBLIC_DAN_API_URL=http://127.0.0.1:2284 npm run dev
+NEXT_PUBLIC_DAN_API_URL=http://localhost:2290 NEXT_PUBLIC_DAN_SHOP=goldendragon npm run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001). The shop server must list `http://localhost:3001` in `DAN_PUBLIC_ORIGINS`, or it refuses the site.
+Open [http://localhost:3001](http://localhost:3001). `NEXT_PUBLIC_DAN_API_URL` is a Dan cloud (here one run locally); `NEXT_PUBLIC_DAN_SHOP` names the shop, by its address name, since `localhost` names none. The cloud must accept this site as the shop's own (`DAN_SHOP_SITE=http://localhost:3001`). A plain shop server works too (`NEXT_PUBLIC_DAN_API_URL=http://127.0.0.1:2284`, listing `http://localhost:3001` in its `DAN_PUBLIC_ORIGINS`); it ignores the shop's name, and has no dish photos.
 
 ```bash
 npm test          # basket, API client, live channel, theme rules
@@ -26,9 +26,9 @@ npm run build
 
 ## Deploy
 
-**In the Dan cloud (how shops run it).** The [Dan cloud](https://github.com/DanPartners/cloud)'s `compose.yaml` builds this repo, pinned to a tested commit, from the `Dockerfile` here (a standalone Next.js build on Node 22, non-root, port 3001). One copy serves every shop: each shop is at `https://<shop>.dan.partners`, where the cloud's front sends `/graphql`, its live channel and `/stripe/webhook` to that shop's customer API and everything else here. Without `NEXT_PUBLIC_DAN_API_URL` the site calls the API at its own address, so it always reaches the shop it was opened for.
+**On Vercel (how shops run it, DAN-45).** One Vercel project for every shop, with `NEXT_PUBLIC_DAN_API_URL=https://cloud.dan.partners` and nothing else. Its domains are `*.dan.partners` (every shop's address) and each shop's own domain; the site names its shop by the address it is visited at, and the cloud finds the shop by it (its address name, or a domain added with `dan-cloud shop domain-add`). Ryan creates the project, and the DNS and domains are in the cloud's DEPLOY.md, step 7. Nothing is set per shop.
 
-**Somewhere else.** Build it with `NEXT_PUBLIC_DAN_API_URL` set to a shop's API address (for example `https://goldendragon.dan.partners`), and have the cloud accept this site's address (`DAN_SHOP_SITE`).
+**The `Dockerfile`** (a standalone Next.js build on Node 22, non-root, port 3001) is what the cloud's `compose.yaml` ran before DAN-45, one copy for every shop behind the cloud's front; it goes with the cloud's old routes in DAN-48. Built that way, it needs `NEXT_PUBLIC_DAN_API_URL` too.
 
 **Card payments** use Stripe Connect: the shop's API gives Dan's platform publishable key and the shop's connected account, and Stripe's card form opens on that account, so the money goes to the shop.
 
@@ -38,7 +38,7 @@ npm run build
 
 | Screen | What it does |
 | --- | --- |
-| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A dish with options (a size, extras) says so and asks how it is taken before it is added: see [Options and add-ons](#options-and-add-ons). A dish with a photo shows it beside the price; tapped, it opens large. Photos come from the shop's own address (`/images/...`, served by the Dan cloud); none is shown if it cannot load. A bar at the foot shows the basket. |
+| Menu | Categories, dishes in English and Chinese, prices, allergens on every dish, set meal contents. Sold-out dishes are shown but cannot be added. A dish with options (a size, extras) says so and asks how it is taken before it is added: see [Options and add-ons](#options-and-add-ons). A dish with a photo shows it beside the price; tapped, it opens large. Photos come from the Dan cloud, under the shop (`/shops/<shop>/images/...`, DAN-45); none is shown if it cannot load. A bar at the foot shows the basket. |
 | Checkout | The basket, editable: each line with what was chosen for it. The shop's add-ons for the bill, and the total. Every allergen in the order, including those inside set meals and those a chosen option brings, and a box to confirm they have been checked (the server refuses an order without it). Name, phone, a note. Pay by card or at the shop. |
 | Order | The private link. The order number, the stage (received, being cooked, ready to collect, collected), the dishes with what was chosen, the add-ons on the bill, the total, and how it is paid. For a card order, Stripe's card form until it is paid. Updates arrive live. |
 
@@ -75,8 +75,8 @@ A QR code on a table points at the site with the table's name: `https://order.yo
 
 ## How it talks to the shop
 
-- **Queries over HTTPS** to `<api>/graphql`: the shop, the menu with the shop's add-ons, what a basket comes to (`quote`), placing an order. The contract is the server's [`public.graphql`](https://github.com/DanPartners/server/blob/main/public.graphql); this side is [`src/lib/api.ts`](src/lib/api.ts).
-- **Live over a WebSocket** at `<api>/graphql/ws` (`graphql-transport-ws`): the order page subscribes to its own order and gets each change as it happens. It reconnects by itself, and the subscription always starts with the order as it is now, so nothing is missed. [`src/lib/live.ts`](src/lib/live.ts) is the same client the dashboard uses.
+- **Queries over HTTPS** to `<cloud>/graphql?shop=<this site's address>`: the shop, the menu with the shop's add-ons, what a basket comes to (`quote`), placing an order. The contract is the server's [`public.graphql`](https://github.com/DanPartners/server/blob/main/public.graphql); this side is [`src/lib/api.ts`](src/lib/api.ts).
+- **Live over a WebSocket** at `<cloud>/graphql/ws?shop=<this site's address>` (`graphql-transport-ws`): the order page subscribes to its own order and gets each change as it happens. It reconnects by itself, and the subscription always starts with the order as it is now, so nothing is missed. [`src/lib/live.ts`](src/lib/live.ts) is the same client the dashboard uses.
 - **Nothing polls.** The menu is loaded once per visit. If a dish sells out in the meantime, the server refuses the order with `sold_out` and the checkout reloads the menu.
 - **Prices are the server's.** The site sends dish numbers, quantities and what was chosen. Where a shop has add-ons the totals shown are the server's own (`quote`); otherwise they are added up here for the customer's convenience. Either way the server prices the order itself when it is placed.
 
@@ -93,10 +93,10 @@ Chinese text uses the phone's own Chinese fonts. The site ships none, which keep
 ## Security
 
 - **No secrets.** The only key in the browser is Stripe's publishable key, which is meant to be public.
-- **Strict Content Security Policy** with a fresh nonce on every request ([`src/proxy.ts`](src/proxy.ts)): only this site's scripts and Stripe's can run; connections go only to this site, the shop's API and Stripe; only Stripe may be framed; nobody may frame this site.
+- **Strict Content Security Policy** with a fresh nonce on every request ([`src/proxy.ts`](src/proxy.ts)): only this site's scripts and Stripe's can run; connections go only to this site, the Dan cloud and Stripe; only Stripe may be framed; nobody may frame this site.
 - **No referrer** is ever sent, so an order's private link cannot leak to another site. Order pages are kept out of search engines.
 - **No cookies, no tracking, no analytics.** The phone keeps only the language and the basket.
-- The shop server does the rest: it refuses sites not on its list, limits orders per address and phone, and never shows one customer another's order. See the server's README.
+- The shop's API does the rest: it refuses any site but the shop's own (its dan.partners address and its own domains), limits orders per address and phone, and never shows one customer another's order. See the server's README.
 
 ## Tests
 

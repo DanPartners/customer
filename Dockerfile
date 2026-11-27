@@ -1,6 +1,6 @@
-# The customer site, as a shop's own machine runs it. The shop server's
-# compose.yaml builds this. Without NEXT_PUBLIC_DAN_API_URL the site calls the
-# API at its own address, which the shop server's web front provides.
+# The ordering site as a container: what the Dan cloud's compose.yaml ran
+# before the site moved to Vercel (DAN-45), until DAN-48. Build it with
+# NEXT_PUBLIC_DAN_API_URL, the Dan cloud's one address.
 FROM node:22.23.5-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1

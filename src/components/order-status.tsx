@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiBase, isToken, loadOrder, orderFields } from "@/lib/api";
+import { apiBase, isToken, loadOrder, orderFields, shopName } from "@/lib/api";
 import { formatPence, formatTime, primaryName, secondaryName, signedPence } from "@/lib/format";
 import { errorKey, useI18n, type CopyKey } from "@/lib/i18n";
 import { live, type LiveStatus } from "@/lib/live";
@@ -70,9 +70,11 @@ function OrderStatus({ shop }: { shop: Shop }) {
 
   useEffect(() => {
     const base = apiBase();
-    if (!isToken(token) || !base) return;
+    const shop = shopName();
+    if (!isToken(token) || !base || !shop) return;
     return live<{ order: PublicOrder }>({
       base,
+      params: { shop },
       query: orderLive(),
       variables: { token },
       onData: ({ order: next }) => {

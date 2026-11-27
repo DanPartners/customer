@@ -2,15 +2,13 @@ import { normalizeTheme } from "./theme";
 import type { DeliveryQuote, Menu, OrderLineInput, PlaceOrderInput, PublicOrder, Quote, Shop } from "./types";
 
 /**
- * The shop's public API. Each copy of this site belongs to one shop.
+ * The shop's customer API, on the Dan cloud's one address (DAN-45):
+ * `NEXT_PUBLIC_DAN_API_URL`, https://cloud.dan.partners. One copy of this site
+ * serves every shop (on Vercel); each call names the shop the site is visited
+ * for (`?shop=`), and that shop's own customer API answers.
  *
- * Usually the site runs on the shop's own machine, behind the same address as
- * the API (the shop server's web front sends /graphql to the API and the rest
- * here), so the API is simply this site's own address. A copy hosted somewhere
- * else is built with the shop's API address in NEXT_PUBLIC_DAN_API_URL.
- *
- * This site is open source and holds no secrets: the shop server decides every
- * price and refuses requests from sites it has not approved.
+ * This site is open source and holds no secrets: the shop's API decides every
+ * price and refuses requests from any site but the shop's own.
  */
 
 export class ApiError extends Error {
@@ -23,11 +21,9 @@ export class ApiError extends Error {
   }
 }
 
-export function apiBase(
-  configured: string | undefined = process.env.NEXT_PUBLIC_DAN_API_URL,
-  here: string | undefined = typeof window === "undefined" ? undefined : window.location.origin,
-): string | null {
-  const raw = (configured?.trim() || here || "").replace(/\/+$/, "");
+/** The Dan cloud's address, without /graphql. Null when the site was built without it. */
+export function apiBase(configured: string | undefined = process.env.NEXT_PUBLIC_DAN_API_URL): string | null {
+  const raw = (configured?.trim() || "").replace(/\/+$/, "");
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -37,18 +33,40 @@ export function apiBase(
   }
 }
 
+/**
+ * Which shop this visit is for: `NEXT_PUBLIC_DAN_SHOP` when set (local work, a
+ * shop's address name), or else the address the site is visited at
+ * (goldendragon.dan.partners, or one of the shop's own domains), which the
+ * cloud knows. Null for anything that is not a plain host name.
+ */
+export function shopName(
+  configured: string | undefined = process.env.NEXT_PUBLIC_DAN_SHOP,
+  here: string | undefined = typeof window === "undefined" ? undefined : window.location.hostname,
+): string | null {
+  const raw = (configured?.trim() || here?.trim() || "").toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/.test(raw) && !raw.includes("..") ? raw : null;
+}
+
+/** The shop's GraphQL address on the cloud. */
+export function graphqlUrl(base: string, shop: string): string {
+  return `${base}/graphql?shop=${encodeURIComponent(shop)}`;
+}
+
+type Options = { fetchImpl?: typeof fetch; base?: string | null; shop?: string | null };
+
 type Body<T> = { data?: T | null; errors?: { message?: string; extensions?: { code?: unknown } }[] };
 
 export async function call<T>(
   query: string,
   variables: Record<string, unknown> = {},
-  options: { fetchImpl?: typeof fetch; base?: string | null } = {},
+  options: Options = {},
 ): Promise<T> {
   const base = options.base === undefined ? apiBase() : options.base;
-  if (!base) throw new ApiError("not_configured", "This site is not connected to a shop yet.");
+  const shop = options.shop === undefined ? shopName() : options.shop;
+  if (!base || !shop) throw new ApiError("not_configured", "This site is not connected to a shop yet.");
   let response: Response;
   try {
-    response = await (options.fetchImpl ?? fetch)(`${base}/graphql`, {
+    response = await (options.fetchImpl ?? fetch)(graphqlUrl(base, shop), {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ query, variables }),
@@ -95,7 +113,7 @@ export const orderFields = () => (priced ? ORDER_PRICED : ORDER_PLAIN);
 const SHOP_FIELDS = `name nameZh address city phone theme { ${THEME} } payments { card atShop } ordering { acceptingOrders table collection delivery deliveryFeePence deliveryMinimumPence payInPerson cashOnDelivery card bankTransfer deliveryQuoted deliveryFreeOverPence } stripePublishableKey stripeAccount`;
 const ITEM_PLAIN = "id number categoryId nameEn nameZh descriptionEn pricePence allergens soldOut kind includes { number qty } photo";
 
-export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<{ shop: Shop; menu: Menu }> {
+export async function loadShop(options?: Options): Promise<{ shop: Shop; menu: Menu }> {
   const ask = (withOptions: boolean) =>
     call<{ shop: Shop; menu: Omit<Menu, "addons">; addons?: Menu["addons"] }>(
       `query Shop {
@@ -126,7 +144,7 @@ export async function loadShop(options?: { fetchImpl?: typeof fetch; base?: stri
  * the bill, and the total before any delivery fee. `addons`: the bill
  * add-ons ticked; left out, the ones ticked to begin with.
  */
-export async function quote(input: { lines: OrderLineInput[]; addons?: string[] }, options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<Quote> {
+export async function quote(input: { lines: OrderLineInput[]; addons?: string[] }, options?: Options): Promise<Quote> {
   const data = await call<{ quote: Quote }>(
     `query Quote($input: QuoteInput!) { quote(input: $input) { totalPence addons { ${APPLIED} } lines { number nameEn nameZh qty unitPricePence totalPence options { choiceId nameEn nameZh pricePence } addons { ${APPLIED} } } } }`,
     { input },
@@ -135,7 +153,7 @@ export async function quote(input: { lines: OrderLineInput[]; addons?: string[] 
   return data.quote;
 }
 
-export async function placeOrder(input: PlaceOrderInput, options?: { fetchImpl?: typeof fetch; base?: string | null }) {
+export async function placeOrder(input: PlaceOrderInput, options?: Options) {
   const data = await call<{ placeOrder: { token: string; order: PublicOrder } }>(
     `mutation Place($input: PlaceOrderInput!) { placeOrder(input: $input) { token order { ${orderFields()} } } }`,
     { input },
@@ -147,7 +165,7 @@ export async function placeOrder(input: PlaceOrderInput, options?: { fetchImpl?:
 /** What an Uber courier to this address costs now. Held for 20 minutes; pass its token with the order. */
 export async function deliveryQuote(
   input: { address: string; postcode: string; phone: string; lines: OrderLineInput[]; addons?: string[] },
-  options?: { fetchImpl?: typeof fetch; base?: string | null },
+  options?: Options,
 ): Promise<DeliveryQuote> {
   const data = await call<{ deliveryQuote: DeliveryQuote }>(
     "mutation Quote($input: DeliveryQuoteInput!) { deliveryQuote(input: $input) { token feePence expiresAt } }",
@@ -157,7 +175,7 @@ export async function deliveryQuote(
   return data.deliveryQuote;
 }
 
-export async function loadOrder(token: string, options?: { fetchImpl?: typeof fetch; base?: string | null }): Promise<PublicOrder> {
+export async function loadOrder(token: string, options?: Options): Promise<PublicOrder> {
   const data = await call<{ order: PublicOrder }>(`query Order($token: String!) { order(token: $token) { ${orderFields()} } }`, { token }, options);
   return data.order;
 }
@@ -167,8 +185,13 @@ export function isToken(value: string): boolean {
   return /^[0-9a-f]{32}$/.test(value);
 }
 
-/** A dish photo's address: served by the Dan cloud at the shop's API address. Null for anything but a photo path. */
-export function photoUrl(photo: string | null | undefined, size: "thumb" | "large", base: string | null = apiBase()): string | null {
-  if (!photo || !base || !/^images\/[0-9a-f]{64}$/.test(photo)) return null;
-  return `${base}/${photo}/${size}.jpg`;
+/** A dish photo's address: served by the Dan cloud, under the shop (DAN-45). Null for anything but a photo path. */
+export function photoUrl(
+  photo: string | null | undefined,
+  size: "thumb" | "large",
+  base: string | null = apiBase(),
+  shop: string | null = shopName(),
+): string | null {
+  if (!photo || !base || !shop || !/^images\/[0-9a-f]{64}$/.test(photo)) return null;
+  return `${base}/shops/${encodeURIComponent(shop)}/${photo}/${size}.jpg`;
 }
