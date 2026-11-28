@@ -28,8 +28,6 @@ npm run build
 
 **On Vercel (how shops run it, DAN-45).** One Vercel project for every shop, with `NEXT_PUBLIC_DAN_API_URL=https://cloud.dan.partners` and nothing else. Its domains are `*.dan.partners` (every shop's address) and each shop's own domain; the site names its shop by the address it is visited at, and the cloud finds the shop by it (its address name, or a domain added with `dan-cloud shop domain-add`). Ryan creates the project, and the DNS and domains are in the cloud's DEPLOY.md, step 7. Nothing is set per shop.
 
-**The `Dockerfile`** (a standalone Next.js build on Node 22, non-root, port 3001) is what the cloud's `compose.yaml` ran before DAN-45, one copy for every shop behind the cloud's front; it goes with the cloud's old routes in DAN-48. Built that way, it needs `NEXT_PUBLIC_DAN_API_URL` too.
-
 **Card payments** use Stripe Connect: the shop's API gives Dan's platform publishable key and the shop's connected account, and Stripe's card form opens on that account, so the money goes to the shop.
 
 **Order numbers:** an order placed here reaches the shop's machine within seconds and gets its number there; the order page says "awaiting number" until then and updates live. If the shop's machine is down, the cloud numbers it from 9001 after 20 seconds.
